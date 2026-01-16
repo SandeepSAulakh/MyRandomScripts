@@ -299,31 +299,37 @@ function setupSheet_(includeSubfolders) {
   sheet.getRange(2, hintsCol, hints.length, 1).setFontStyle('italic');
   sheet.setColumnWidth(hintsCol, 200);
 
-  // Setup status area header (column I, after Hints column)
-  const statusCol = hintsCol + 1;
+  // Setup status area header (always column I = 9)
+  const statusCol = 9; // Fixed column I for status
   sheet.getRange(1, statusCol).setValue('⏳ Starting...');
   sheet.getRange(1, statusCol).setFontWeight('bold');
   sheet.getRange(1, statusCol).setBackground('#fff3cd');
-  sheet.setColumnWidth(statusCol, 350);
+  sheet.setColumnWidth(statusCol, 300);
 
   // Add usage instructions below status
   const instructions = [
-    ['📋 HOW TO USE:'],
+    ['📋 HOW TO FIND EMPTY FOLDERS:'],
     ['1. Review the folder list'],
     ['2. Menu → Find Empty Folders'],
-    ['3. Type "Remove" in Action column'],
-    ['4. Menu → Remove Marked Folders'],
+    ['3. Empty folders get marked'],
+    ['   in the Action column'],
     [''],
-    ['📌 ACTION COLUMN OPTIONS:'],
-    ['"Remove" or "Delete" or "X"'],
-    ['  → Marks folder for deletion'],
+    ['📋 HOW TO MARK & REMOVE:'],
+    ['1. Type "Remove" in Action column'],
+    ['   (or "Delete" or "X")'],
+    ['2. Menu → Remove Marked Folders'],
+    ['3. Confirm deletion'],
+    ['4. Folders move to Trash'],
+    ['   (recoverable 30 days)'],
     [''],
-    ['"📭 Empty" (auto-filled)'],
-    ['  → Folder has no files']
+    ['📌 ACTION COLUMN VALUES:'],
+    ['"Remove"/"Delete"/"X" = delete'],
+    ['"📭 Empty" = no files found']
   ];
   sheet.getRange(3, statusCol, instructions.length, 1).setValues(instructions);
-  sheet.getRange(3, statusCol, 1, 1).setFontWeight('bold');
-  sheet.getRange(9, statusCol, 1, 1).setFontWeight('bold');
+  sheet.getRange(3, statusCol, 1, 1).setFontWeight('bold');  // "HOW TO FIND EMPTY"
+  sheet.getRange(9, statusCol, 1, 1).setFontWeight('bold');  // "HOW TO MARK & REMOVE"
+  sheet.getRange(17, statusCol, 1, 1).setFontWeight('bold'); // "ACTION COLUMN VALUES"
 
   return sheet;
 }
