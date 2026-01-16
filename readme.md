@@ -1,6 +1,6 @@
 # MyRandomScripts
 
-Just some random browser scripts I made to make my life a little easier. 🤷‍♂️
+Just some random browser scripts I made to make my life a little easier.
 
 ---
 
@@ -8,9 +8,20 @@ Just some random browser scripts I made to make my life a little easier. 🤷‍
 
 | Folder | What it does |
 |--------|--------------|
-| **[google/](./google/)** | Google Apps Scripts for Drive, Sheets, etc. |
+| **[google/](./google/)** | Google Apps Scripts - List folders, find empty folders, bulk remove |
 | **[udemy/](./udemy/)** | Auto-enroll in free Udemy courses + open coupon links from Gmail |
 | **[youtube/](./youtube/)** | Auto-remove watched videos from Watch Later playlist |
+
+---
+
+## Highlights
+
+### Google Drive Folder Manager
+List all your Google Drive folders in a spreadsheet, find empty ones, and bulk delete them.
+- List folders only or include subfolders
+- Find empty folders (checks subfolders recursively)
+- Mark folders with "Remove" and delete them in bulk
+- [See details →](./google/)
 
 ---
 
@@ -37,5 +48,3 @@ Just some random browser scripts I made to make my life a little easier. 🤷‍
 4. Save & run from the custom menu
 
 ---
-
-🤖
