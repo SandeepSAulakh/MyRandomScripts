@@ -5,6 +5,7 @@
  * - Batch processing to avoid timeout
  * - Resume capability if interrupted
  * - LIVE progress indicator
+ * - Option to list folders only OR include subfolders
  *
  * Usage:
  * 1. Open Google Sheets
@@ -25,11 +26,25 @@ const CONFIG = {
 const STATUS_CELL = 'G1';
 
 /**
+ * List folders only (no subfolders)
+ */
+function listFoldersOnly() {
+  startListing_(false);
+}
+
+/**
+ * List folders with their subfolders
+ */
+function listFoldersWithSubfolders() {
+  startListing_(true);
+}
+
+/**
  * Main function - starts fresh listing
  */
-function listFolders() {
+function startListing_(includeSubfolders) {
   clearProgress_();
-  const sheet = setupSheet_();
+  const sheet = setupSheet_(includeSubfolders);
 
   // Get folder ID
   let folderId = CONFIG.FOLDER_ID;
@@ -44,10 +59,12 @@ function listFolders() {
     folderId = response.getResponseText().trim();
   }
 
-  // Save folder ID for resume capability
-  PropertiesService.getScriptProperties().setProperty('ROOT_FOLDER_ID', folderId);
+  // Save settings for resume capability
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('ROOT_FOLDER_ID', folderId);
+  props.setProperty('INCLUDE_SUBFOLDERS', includeSubfolders.toString());
 
-  processAllFolders_(folderId);
+  processAllFolders_(folderId, includeSubfolders);
 }
 
 /**
@@ -56,13 +73,14 @@ function listFolders() {
 function resumeListing() {
   const props = PropertiesService.getScriptProperties();
   const folderId = props.getProperty('ROOT_FOLDER_ID');
+  const includeSubfolders = props.getProperty('INCLUDE_SUBFOLDERS') === 'true';
 
   if (!folderId && folderId !== '') {
     SpreadsheetApp.getUi().alert('Nothing to resume. Run "List Folders" first.');
     return;
   }
 
-  processAllFolders_(folderId);
+  processAllFolders_(folderId, includeSubfolders);
 }
 
 /**
@@ -74,8 +92,9 @@ function updateStatus_(sheet, message, color) {
   statusCell.setFontWeight('bold');
   statusCell.setBackground(color || '#fff3cd'); // Yellow by default
 
-  // Also update G2 for extra visibility
-  sheet.getRange('G2').setValue(new Date().toLocaleTimeString());
+  // Also update next row for extra visibility
+  const timeCell = sheet.getRange('G2');
+  timeCell.setValue(new Date().toLocaleTimeString());
 
   // Force the sheet to update visually
   SpreadsheetApp.flush();
@@ -84,7 +103,7 @@ function updateStatus_(sheet, message, color) {
 /**
  * Process all folders with timeout protection
  */
-function processAllFolders_(rootFolderId) {
+function processAllFolders_(rootFolderId, includeSubfolders) {
   const startTime = Date.now();
   const props = PropertiesService.getScriptProperties();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
@@ -104,7 +123,7 @@ function processAllFolders_(rootFolderId) {
     }
 
     // Setup fresh sheet
-    setupSheet_();
+    setupSheet_(includeSubfolders);
     updateStatus_(sheet, '⏳ Scanning folders...', '#fff3cd');
 
     // Collect all top-level folder IDs
@@ -118,22 +137,29 @@ function processAllFolders_(rootFolderId) {
       folderIds: folderIds,
       currentIndex: 0,
       totalFolders: folderIds.length,
-      processedCount: 0
+      processedCount: 0,
+      includeSubfolders: includeSubfolders
     };
 
     updateStatus_(sheet, `📁 Found ${folderIds.length} folders to process`, '#fff3cd');
   }
 
+  // Use saved setting if resuming
+  includeSubfolders = state.includeSubfolders;
+
   const data = [];
   let processedThisRun = 0;
   let currentFolderName = '';
+
+  // Determine number of columns based on mode
+  const numCols = includeSubfolders ? 5 : 3;
 
   // Process folders
   while (state.currentIndex < state.folderIds.length) {
     // Check if we're running out of time
     if (Date.now() - startTime > CONFIG.MAX_RUNTIME_MS) {
       // Save progress and prompt to continue
-      saveData_(sheet, data);
+      saveData_(sheet, data, numCols);
       state.processedCount += processedThisRun;
       props.setProperty('PROCESS_STATE', JSON.stringify(state));
 
@@ -154,28 +180,38 @@ function processAllFolders_(rootFolderId) {
     try {
       const folder = DriveApp.getFolderById(folderId);
       const folderName = folder.getName();
+      const folderUrl = folder.getUrl();
       currentFolderName = folderName;
 
-      // Get subfolders (one level only)
-      const subfolders = folder.getFolders();
+      if (includeSubfolders) {
+        // Get subfolders (one level only)
+        const subfolders = folder.getFolders();
 
-      if (!subfolders.hasNext()) {
-        data.push([folderName, folderId, '(no subfolders)', '', '']);
-      } else {
-        while (subfolders.hasNext()) {
-          const sub = subfolders.next();
-          data.push([
-            folderName,
-            folderId,
-            sub.getName(),
-            sub.getId(),
-            sub.getUrl()
-          ]);
+        if (!subfolders.hasNext()) {
+          data.push([folderName, folderId, '(no subfolders)', '', '']);
+        } else {
+          while (subfolders.hasNext()) {
+            const sub = subfolders.next();
+            data.push([
+              folderName,
+              folderId,
+              sub.getName(),
+              sub.getId(),
+              sub.getUrl()
+            ]);
+          }
         }
+      } else {
+        // Folders only - no subfolders
+        data.push([folderName, folderId, folderUrl]);
       }
     } catch (e) {
       // Skip inaccessible folders
-      data.push(['(Error)', folderId, 'Could not access: ' + e.message, '', '']);
+      if (includeSubfolders) {
+        data.push(['(Error)', folderId, 'Could not access: ' + e.message, '', '']);
+      } else {
+        data.push(['(Error)', folderId, 'Could not access: ' + e.message]);
+      }
     }
 
     state.currentIndex++;
@@ -183,7 +219,7 @@ function processAllFolders_(rootFolderId) {
 
     // Save in batches and update progress
     if (processedThisRun % CONFIG.BATCH_SIZE === 0) {
-      saveData_(sheet, data);
+      saveData_(sheet, data, numCols);
       data.length = 0; // Clear array
 
       const totalProcessed = state.processedCount + processedThisRun;
@@ -194,14 +230,14 @@ function processAllFolders_(rootFolderId) {
 
   // Save any remaining data
   if (data.length > 0) {
-    saveData_(sheet, data);
+    saveData_(sheet, data, numCols);
   }
 
   // Done! Clean up
   clearProgress_();
 
   // Auto-resize columns
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= numCols; i++) {
     sheet.autoResizeColumn(i);
   }
 
@@ -221,11 +257,17 @@ function processAllFolders_(rootFolderId) {
 /**
  * Setup sheet with headers
  */
-function setupSheet_() {
+function setupSheet_(includeSubfolders) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   sheet.clear();
 
-  const headers = ['Parent Folder', 'Parent Folder ID', 'Subfolder', 'Subfolder ID', 'Subfolder URL'];
+  let headers;
+  if (includeSubfolders) {
+    headers = ['Parent Folder', 'Parent Folder ID', 'Subfolder', 'Subfolder ID', 'Subfolder URL'];
+  } else {
+    headers = ['Folder Name', 'Folder ID', 'Folder URL'];
+  }
+
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
@@ -242,11 +284,11 @@ function setupSheet_() {
 /**
  * Append data to sheet
  */
-function saveData_(sheet, data) {
+function saveData_(sheet, data, numCols) {
   if (data.length === 0) return;
 
   const lastRow = Math.max(sheet.getLastRow(), 1);
-  sheet.getRange(lastRow + 1, 1, data.length, 5).setValues(data);
+  sheet.getRange(lastRow + 1, 1, data.length, numCols).setValues(data);
 }
 
 /**
@@ -256,6 +298,7 @@ function clearProgress_() {
   const props = PropertiesService.getScriptProperties();
   props.deleteProperty('PROCESS_STATE');
   props.deleteProperty('ROOT_FOLDER_ID');
+  props.deleteProperty('INCLUDE_SUBFOLDERS');
 }
 
 /**
@@ -272,9 +315,10 @@ function resetAndStartOver() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Folder List')
-    .addItem('List Folders & Subfolders', 'listFolders')
-    .addItem('Resume Listing', 'resumeListing')
+    .addItem('📁 List Folders Only', 'listFoldersOnly')
+    .addItem('📂 List Folders + Subfolders', 'listFoldersWithSubfolders')
     .addSeparator()
-    .addItem('Reset / Start Over', 'resetAndStartOver')
+    .addItem('▶️ Resume Listing', 'resumeListing')
+    .addItem('🔄 Reset / Start Over', 'resetAndStartOver')
     .addToUi();
 }
