@@ -4,7 +4,7 @@
  * Handles LARGE folder structures with:
  * - Batch processing to avoid timeout
  * - Resume capability if interrupted
- * - Progress tracking
+ * - LIVE progress indicator
  *
  * Usage:
  * 1. Open Google Sheets
@@ -17,9 +17,12 @@
 // Configuration
 const CONFIG = {
   FOLDER_ID: '',              // Set your folder ID here, or leave empty to prompt
-  BATCH_SIZE: 50,             // Folders to process before saving progress
+  BATCH_SIZE: 10,             // Folders to process before updating sheet (lower = more frequent updates)
   MAX_RUNTIME_MS: 5 * 60 * 1000  // 5 minutes (leave 1 min buffer before 6 min limit)
 };
+
+// Status cell location (top-right corner)
+const STATUS_CELL = 'G1';
 
 /**
  * Main function - starts fresh listing
@@ -63,6 +66,22 @@ function resumeListing() {
 }
 
 /**
+ * Update the status indicator
+ */
+function updateStatus_(sheet, message, color) {
+  const statusCell = sheet.getRange(STATUS_CELL);
+  statusCell.setValue(message);
+  statusCell.setFontWeight('bold');
+  statusCell.setBackground(color || '#fff3cd'); // Yellow by default
+
+  // Also update G2 for extra visibility
+  sheet.getRange('G2').setValue(new Date().toLocaleTimeString());
+
+  // Force the sheet to update visually
+  SpreadsheetApp.flush();
+}
+
+/**
  * Process all folders with timeout protection
  */
 function processAllFolders_(rootFolderId) {
@@ -84,7 +103,9 @@ function processAllFolders_(rootFolderId) {
       return;
     }
 
-    ui.alert('Scanning...', 'Collecting folder list. This may take a moment for large drives.', ui.ButtonSet.OK);
+    // Setup fresh sheet
+    setupSheet_();
+    updateStatus_(sheet, '⏳ Scanning folders...', '#fff3cd');
 
     // Collect all top-level folder IDs
     const folderIds = [];
@@ -100,12 +121,12 @@ function processAllFolders_(rootFolderId) {
       processedCount: 0
     };
 
-    // Setup fresh sheet
-    setupSheet_();
+    updateStatus_(sheet, `📁 Found ${folderIds.length} folders to process`, '#fff3cd');
   }
 
   const data = [];
   let processedThisRun = 0;
+  let currentFolderName = '';
 
   // Process folders
   while (state.currentIndex < state.folderIds.length) {
@@ -116,9 +137,12 @@ function processAllFolders_(rootFolderId) {
       state.processedCount += processedThisRun;
       props.setProperty('PROCESS_STATE', JSON.stringify(state));
 
+      const percent = Math.round((state.processedCount / state.totalFolders) * 100);
+      updateStatus_(sheet, `⏸️ PAUSED: ${state.processedCount}/${state.totalFolders} (${percent}%) - Click Resume`, '#f8d7da');
+
       ui.alert(
         'Paused - Time Limit',
-        `Processed ${state.processedCount} of ${state.totalFolders} folders.\n\n` +
+        `Processed ${state.processedCount} of ${state.totalFolders} folders (${percent}%).\n\n` +
         'Click "Resume Listing" from the menu to continue.',
         ui.ButtonSet.OK
       );
@@ -130,6 +154,7 @@ function processAllFolders_(rootFolderId) {
     try {
       const folder = DriveApp.getFolderById(folderId);
       const folderName = folder.getName();
+      currentFolderName = folderName;
 
       // Get subfolders (one level only)
       const subfolders = folder.getFolders();
@@ -156,10 +181,14 @@ function processAllFolders_(rootFolderId) {
     state.currentIndex++;
     processedThisRun++;
 
-    // Save in batches to prevent data loss
-    if (data.length >= CONFIG.BATCH_SIZE) {
+    // Save in batches and update progress
+    if (processedThisRun % CONFIG.BATCH_SIZE === 0) {
       saveData_(sheet, data);
       data.length = 0; // Clear array
+
+      const totalProcessed = state.processedCount + processedThisRun;
+      const percent = Math.round((totalProcessed / state.totalFolders) * 100);
+      updateStatus_(sheet, `🔄 Processing: ${totalProcessed}/${state.totalFolders} (${percent}%) - "${currentFolderName}"`, '#fff3cd');
     }
   }
 
@@ -177,6 +206,11 @@ function processAllFolders_(rootFolderId) {
   }
 
   state.processedCount += processedThisRun;
+
+  // Show completion status
+  updateStatus_(sheet, `✅ DONE! Listed ${state.totalFolders} folders`, '#d4edda');
+  sheet.getRange('G2').setValue('Completed: ' + new Date().toLocaleString());
+
   ui.alert(
     'Complete!',
     `Finished listing ${state.totalFolders} folders.`,
@@ -195,6 +229,12 @@ function setupSheet_() {
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
+
+  // Setup status area header
+  sheet.getRange('G1').setValue('⏳ Starting...');
+  sheet.getRange('G1').setFontWeight('bold');
+  sheet.getRange('G1').setBackground('#fff3cd');
+  sheet.setColumnWidth(7, 350); // Make status column wider
 
   return sheet;
 }
