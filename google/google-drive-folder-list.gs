@@ -6,6 +6,7 @@
  * - Resume capability if interrupted
  * - LIVE progress indicator
  * - Option to list folders only OR include subfolders
+ * - Remove folders marked with "Remove" in Action column
  *
  * Usage:
  * 1. Open Google Sheets
@@ -23,7 +24,10 @@ const CONFIG = {
 };
 
 // Status cell location (top-right corner)
-const STATUS_CELL = 'G1';
+const STATUS_CELL = 'H1';
+
+// Action column index (F = 6)
+const ACTION_COL = 6;
 
 /**
  * List folders only (no subfolders)
@@ -93,7 +97,7 @@ function updateStatus_(sheet, message, color) {
   statusCell.setBackground(color || '#fff3cd'); // Yellow by default
 
   // Also update next row for extra visibility
-  const timeCell = sheet.getRange('G2');
+  const timeCell = sheet.getRange('H2');
   timeCell.setValue(new Date().toLocaleTimeString());
 
   // Force the sheet to update visually
@@ -106,6 +110,123 @@ function updateStatus_(sheet, message, color) {
 function formatDate_(date) {
   if (!date) return '';
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+}
+
+/**
+ * Extract folder ID from Google Drive URL
+ */
+function extractFolderId_(url) {
+  if (!url) return null;
+  const match = url.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Remove folders marked with "Remove" in Action column
+ */
+function removeMarkedFolders() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  // Get all data
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    ui.alert('No data found', 'Please run a folder listing first.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Find URL column (B for folders only, C for subfolders mode)
+  const headers = sheet.getRange(1, 1, 1, 6).getValues()[0];
+  const urlColIndex = headers.indexOf('Folder URL') !== -1 ? 2 : 3; // B=2 or C=3
+
+  // Get action column and URL column data
+  const dataRange = sheet.getRange(2, 1, lastRow - 1, ACTION_COL);
+  const data = dataRange.getValues();
+
+  // Find rows marked for removal
+  const toRemove = [];
+  for (let i = 0; i < data.length; i++) {
+    const action = String(data[i][ACTION_COL - 1]).toLowerCase().trim();
+    if (action === 'remove' || action === 'delete' || action === 'x') {
+      const url = data[i][urlColIndex - 1];
+      const folderId = extractFolderId_(url);
+      const folderName = data[i][0]; // Column A
+      if (folderId) {
+        toRemove.push({
+          row: i + 2, // Sheet row (1-indexed, after header)
+          folderId: folderId,
+          folderName: folderName,
+          url: url
+        });
+      }
+    }
+  }
+
+  if (toRemove.length === 0) {
+    ui.alert('No folders to remove', 'Type "Remove" in column F (Action) for folders you want to delete, then run this again.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Confirm with user
+  const confirm = ui.alert(
+    '⚠️ Confirm Removal',
+    `You are about to move ${toRemove.length} folder(s) to TRASH:\n\n` +
+    toRemove.slice(0, 10).map(f => `• ${f.folderName}`).join('\n') +
+    (toRemove.length > 10 ? `\n... and ${toRemove.length - 10} more` : '') +
+    '\n\nFolders will be moved to Trash (recoverable for 30 days).\n\nContinue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirm !== ui.Button.YES) {
+    ui.alert('Cancelled', 'No folders were removed.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Process removals
+  updateStatus_(sheet, `🗑️ Removing 0/${toRemove.length} folders...`, '#fff3cd');
+
+  let removed = 0;
+  let errors = 0;
+  const errorMessages = [];
+
+  for (let i = 0; i < toRemove.length; i++) {
+    const item = toRemove[i];
+
+    try {
+      const folder = DriveApp.getFolderById(item.folderId);
+      folder.setTrashed(true);
+
+      // Update the row to show it was removed
+      sheet.getRange(item.row, ACTION_COL).setValue('✓ Removed');
+      sheet.getRange(item.row, ACTION_COL).setBackground('#d4edda');
+
+      removed++;
+    } catch (e) {
+      // Mark as error
+      sheet.getRange(item.row, ACTION_COL).setValue('⚠️ Error');
+      sheet.getRange(item.row, ACTION_COL).setBackground('#f8d7da');
+      errors++;
+      errorMessages.push(`${item.folderName}: ${e.message}`);
+    }
+
+    // Update progress every 5 folders
+    if ((i + 1) % 5 === 0 || i === toRemove.length - 1) {
+      updateStatus_(sheet, `🗑️ Removing ${i + 1}/${toRemove.length} folders...`, '#fff3cd');
+    }
+  }
+
+  // Show completion
+  updateStatus_(sheet, `✅ Removed ${removed} folders (${errors} errors)`, removed > 0 ? '#d4edda' : '#f8d7da');
+
+  let message = `Successfully moved ${removed} folder(s) to Trash.`;
+  if (errors > 0) {
+    message += `\n\n${errors} folder(s) could not be removed:\n` + errorMessages.slice(0, 5).join('\n');
+    if (errorMessages.length > 5) {
+      message += `\n... and ${errorMessages.length - 5} more errors`;
+    }
+  }
+
+  ui.alert('Removal Complete', message, ui.ButtonSet.OK);
 }
 
 /**
@@ -158,10 +279,10 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
   let processedThisRun = 0;
   let currentFolderName = '';
 
-  // Determine number of columns based on mode
-  // Folders only: Name, URL, Created, Modified (4 cols)
-  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified (5 cols)
-  const numCols = includeSubfolders ? 5 : 4;
+  // Determine number of columns based on mode (now +1 for Action column)
+  // Folders only: Name, URL, Created, Modified, Action (5 cols)
+  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified, Action (6 cols)
+  const numCols = includeSubfolders ? 6 : 5;
 
   // Process folders
   while (state.currentIndex < state.folderIds.length) {
@@ -199,7 +320,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
         const subfolders = folder.getFolders();
 
         if (!subfolders.hasNext()) {
-          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified]);
+          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified, '']);
         } else {
           while (subfolders.hasNext()) {
             const sub = subfolders.next();
@@ -208,20 +329,21 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
               sub.getName(),
               sub.getUrl(),
               formatDate_(sub.getDateCreated()),
-              formatDate_(sub.getLastUpdated())
+              formatDate_(sub.getLastUpdated()),
+              '' // Action column
             ]);
           }
         }
       } else {
         // Folders only - no subfolders
-        data.push([folderName, folderUrl, folderCreated, folderModified]);
+        data.push([folderName, folderUrl, folderCreated, folderModified, '']);
       }
     } catch (e) {
       // Skip inaccessible folders
       if (includeSubfolders) {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '']);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '', '']);
       } else {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '']);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '']);
       }
     }
 
@@ -256,11 +378,11 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
 
   // Show completion status
   updateStatus_(sheet, `✅ DONE! Listed ${state.totalFolders} folders`, '#d4edda');
-  sheet.getRange('G2').setValue('Completed: ' + new Date().toLocaleString());
+  sheet.getRange('H2').setValue('Completed: ' + new Date().toLocaleString());
 
   ui.alert(
     'Complete!',
-    `Finished listing ${state.totalFolders} folders.`,
+    `Finished listing ${state.totalFolders} folders.\n\nTo remove folders: Type "Remove" in the Action column (F), then click "Remove Marked Folders" from the menu.`,
     ui.ButtonSet.OK
   );
 }
@@ -274,20 +396,25 @@ function setupSheet_(includeSubfolders) {
 
   let headers;
   if (includeSubfolders) {
-    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified'];
+    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified', 'Action'];
   } else {
-    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified'];
+    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified', 'Action'];
   }
 
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
+  // Style the Action column header
+  const actionHeaderCell = sheet.getRange(1, headers.length);
+  actionHeaderCell.setBackground('#ffe6e6');
+  actionHeaderCell.setNote('Type "Remove" to mark folders for deletion');
+
   // Setup status area header
-  sheet.getRange('G1').setValue('⏳ Starting...');
-  sheet.getRange('G1').setFontWeight('bold');
-  sheet.getRange('G1').setBackground('#fff3cd');
-  sheet.setColumnWidth(7, 350); // Make status column wider
+  sheet.getRange('H1').setValue('⏳ Starting...');
+  sheet.getRange('H1').setFontWeight('bold');
+  sheet.getRange('H1').setBackground('#fff3cd');
+  sheet.setColumnWidth(8, 350); // Make status column wider
 
   return sheet;
 }
@@ -298,7 +425,7 @@ function setupSheet_(includeSubfolders) {
 function saveData_(sheet, data, numCols) {
   if (data.length === 0) return;
 
-  // Get last row with data in column A (ignore status column G)
+  // Get last row with data in column A (ignore status column H)
   const colAValues = sheet.getRange('A:A').getValues();
   let lastRow = 1; // Start after header
   for (let i = colAValues.length - 1; i >= 0; i--) {
@@ -340,5 +467,7 @@ function onOpen() {
     .addSeparator()
     .addItem('▶️ Resume Listing', 'resumeListing')
     .addItem('🔄 Reset / Start Over', 'resetAndStartOver')
+    .addSeparator()
+    .addItem('🗑️ Remove Marked Folders', 'removeMarkedFolders')
     .addToUi();
 }
