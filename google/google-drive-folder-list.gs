@@ -101,6 +101,14 @@ function updateStatus_(sheet, message, color) {
 }
 
 /**
+ * Format date for display
+ */
+function formatDate_(date) {
+  if (!date) return '';
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+}
+
+/**
  * Process all folders with timeout protection
  */
 function processAllFolders_(rootFolderId, includeSubfolders) {
@@ -152,7 +160,9 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
   let currentFolderName = '';
 
   // Determine number of columns based on mode
-  const numCols = includeSubfolders ? 5 : 3;
+  // Folders only: Name, URL, Created, Modified (4 cols)
+  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified (5 cols)
+  const numCols = includeSubfolders ? 5 : 4;
 
   // Process folders
   while (state.currentIndex < state.folderIds.length) {
@@ -181,6 +191,8 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
       const folder = DriveApp.getFolderById(folderId);
       const folderName = folder.getName();
       const folderUrl = folder.getUrl();
+      const folderCreated = formatDate_(folder.getDateCreated());
+      const folderModified = formatDate_(folder.getLastUpdated());
       currentFolderName = folderName;
 
       if (includeSubfolders) {
@@ -188,29 +200,29 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
         const subfolders = folder.getFolders();
 
         if (!subfolders.hasNext()) {
-          data.push([folderName, folderId, '(no subfolders)', '', '']);
+          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified]);
         } else {
           while (subfolders.hasNext()) {
             const sub = subfolders.next();
             data.push([
               folderName,
-              folderId,
               sub.getName(),
-              sub.getId(),
-              sub.getUrl()
+              sub.getUrl(),
+              formatDate_(sub.getDateCreated()),
+              formatDate_(sub.getLastUpdated())
             ]);
           }
         }
       } else {
         // Folders only - no subfolders
-        data.push([folderName, folderId, folderUrl]);
+        data.push([folderName, folderUrl, folderCreated, folderModified]);
       }
     } catch (e) {
       // Skip inaccessible folders
       if (includeSubfolders) {
-        data.push(['(Error)', folderId, 'Could not access: ' + e.message, '', '']);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '']);
       } else {
-        data.push(['(Error)', folderId, 'Could not access: ' + e.message]);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '']);
       }
     }
 
@@ -263,9 +275,9 @@ function setupSheet_(includeSubfolders) {
 
   let headers;
   if (includeSubfolders) {
-    headers = ['Parent Folder', 'Parent Folder ID', 'Subfolder', 'Subfolder ID', 'Subfolder URL'];
+    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified'];
   } else {
-    headers = ['Folder Name', 'Folder ID', 'Folder URL'];
+    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified'];
   }
 
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
