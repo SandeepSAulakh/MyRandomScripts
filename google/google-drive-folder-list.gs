@@ -101,11 +101,30 @@ function updateStatus_(sheet, message, color) {
 }
 
 /**
- * Format date for display
+ * Format date for display (date only, no time)
  */
 function formatDate_(date) {
   if (!date) return '';
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+/**
+ * Get upload status tag based on date
+ * Returns: { tag: string, color: string } or null if older than 30 days
+ */
+function getUploadStatus_(date) {
+  if (!date) return null;
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 7) {
+    return { tag: 'New Upload', color: '#d4edda' };  // Light green
+  } else if (diffDays <= 30) {
+    return { tag: 'Recent Upload', color: '#fff3cd' };  // Light yellow
+  }
+  return null;
 }
 
 /**
@@ -155,12 +174,13 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
   includeSubfolders = state.includeSubfolders;
 
   const data = [];
+  const statusData = [];  // Track status colors for later
   let processedThisRun = 0;
   let currentFolderName = '';
 
   // Determine number of columns based on mode
-  // Folders only: Name, URL, Created, Modified, Action (5 cols)
-  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified, Action (6 cols)
+  // Folders only: Status, Name, URL, Date Added, Action (5 cols)
+  // With subfolders: Status, Parent Folder, Subfolder, Subfolder URL, Date Added, Action (6 cols)
   const numCols = includeSubfolders ? 6 : 5;
 
   // Process folders
@@ -168,7 +188,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
     // Check if we're running out of time
     if (Date.now() - startTime > CONFIG.MAX_RUNTIME_MS) {
       // Save progress and prompt to continue
-      saveData_(sheet, data, numCols);
+      saveData_(sheet, data, numCols, statusData);
       state.processedCount += processedThisRun;
       props.setProperty('PROCESS_STATE', JSON.stringify(state));
 
@@ -190,8 +210,9 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
       const folder = DriveApp.getFolderById(folderId);
       const folderName = folder.getName();
       const folderUrl = folder.getUrl();
-      const folderCreated = formatDate_(folder.getDateCreated());
-      const folderModified = formatDate_(folder.getLastUpdated());
+      const folderDate = folder.getLastUpdated();
+      const folderDateFormatted = formatDate_(folderDate);
+      const folderStatus = getUploadStatus_(folderDate);
       currentFolderName = folderName;
 
       if (includeSubfolders) {
@@ -199,30 +220,39 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
         const subfolders = folder.getFolders();
 
         if (!subfolders.hasNext()) {
-          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified, '']);
+          const statusTag = folderStatus ? folderStatus.tag : '';
+          data.push([statusTag, folderName, '(no subfolders)', '', folderDateFormatted, '']);
+          statusData.push(folderStatus);
         } else {
           while (subfolders.hasNext()) {
             const sub = subfolders.next();
+            const subDate = sub.getLastUpdated();
+            const subStatus = getUploadStatus_(subDate);
             data.push([
+              subStatus ? subStatus.tag : '',
               folderName,
               sub.getName(),
               sub.getUrl(),
-              formatDate_(sub.getDateCreated()),
-              formatDate_(sub.getLastUpdated()),
+              formatDate_(subDate),
               ''  // Action column
             ]);
+            statusData.push(subStatus);
           }
         }
       } else {
         // Folders only - no subfolders
-        data.push([folderName, folderUrl, folderCreated, folderModified, '']);
+        const statusTag = folderStatus ? folderStatus.tag : '';
+        data.push([statusTag, folderName, folderUrl, folderDateFormatted, '']);
+        statusData.push(folderStatus);
       }
     } catch (e) {
       // Skip inaccessible folders
       if (includeSubfolders) {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '', '']);
+        data.push(['', '(Error)', 'Could not access: ' + e.message, '', '', '']);
+        statusData.push(null);
       } else {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '']);
+        data.push(['', '(Error)', 'Could not access: ' + e.message, '', '']);
+        statusData.push(null);
       }
     }
 
@@ -231,8 +261,9 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
 
     // Save in batches and update progress
     if (processedThisRun % CONFIG.BATCH_SIZE === 0) {
-      saveData_(sheet, data, numCols);
+      saveData_(sheet, data, numCols, statusData);
       data.length = 0; // Clear array
+      statusData.length = 0; // Clear status array
 
       const totalProcessed = state.processedCount + processedThisRun;
       const percent = Math.round((totalProcessed / state.totalFolders) * 100);
@@ -242,7 +273,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
 
   // Save any remaining data
   if (data.length > 0) {
-    saveData_(sheet, data, numCols);
+    saveData_(sheet, data, numCols, statusData);
   }
 
   // Done! Clean up
@@ -275,9 +306,9 @@ function setupSheet_(includeSubfolders) {
 
   let headers;
   if (includeSubfolders) {
-    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified', 'Action'];
+    headers = ['Status', 'Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Added', 'Action'];
   } else {
-    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified', 'Action'];
+    headers = ['Status', 'Folder Name', 'Folder URL', 'Date Added', 'Action'];
   }
 
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -293,39 +324,39 @@ function setupSheet_(includeSubfolders) {
 
   // Add usage instructions below status
   const instructions = [
-    ['📋 HOW TO FIND EMPTY FOLDERS:'],
-    ['1. Review the folder list'],
-    ['2. Menu → Find Empty Folders'],
-    ['3. Empty folders get marked'],
-    ['   in the Action column'],
+    ['📌 STATUS COLUMN:'],
+    ['"New Upload" = last 7 days'],
+    ['"Recent Upload" = last 30 days'],
     [''],
-    ['📋 HOW TO MARK & REMOVE:'],
-    ['1. Type "Remove" in Action column'],
-    ['   (or "Delete" or "X")'],
-    ['2. Menu → Remove Marked Folders'],
-    ['3. Confirm deletion'],
-    ['4. Folders move to Trash'],
-    ['   (recoverable 30 days)'],
+    ['📋 HOW TO FIND EMPTY FOLDERS:'],
+    ['1. Menu → Find Empty Folders'],
+    ['2. Empty folders get marked'],
+    [''],
+    ['📋 HOW TO REMOVE:'],
+    ['• Menu → Remove Empty Folders'],
+    ['• Or type "Remove" in Action'],
+    ['   then → Remove Marked Folders'],
     [''],
     ['📌 ACTION COLUMN VALUES:'],
     ['"Remove"/"Delete"/"X" = delete'],
     ['"📭 Empty" = no files found']
   ];
   sheet.getRange(3, statusCol, instructions.length, 1).setValues(instructions);
-  sheet.getRange(3, statusCol, 1, 1).setFontWeight('bold');  // "HOW TO FIND EMPTY"
-  sheet.getRange(9, statusCol, 1, 1).setFontWeight('bold');  // "HOW TO MARK & REMOVE"
-  sheet.getRange(17, statusCol, 1, 1).setFontWeight('bold'); // "ACTION COLUMN VALUES"
+  sheet.getRange(3, statusCol, 1, 1).setFontWeight('bold');  // "STATUS COLUMN"
+  sheet.getRange(7, statusCol, 1, 1).setFontWeight('bold');  // "HOW TO FIND EMPTY"
+  sheet.getRange(10, statusCol, 1, 1).setFontWeight('bold'); // "HOW TO REMOVE"
+  sheet.getRange(15, statusCol, 1, 1).setFontWeight('bold'); // "ACTION COLUMN VALUES"
 
   return sheet;
 }
 
 /**
- * Append data to sheet
+ * Append data to sheet and apply status colors
  */
-function saveData_(sheet, data, numCols) {
+function saveData_(sheet, data, numCols, statusData) {
   if (data.length === 0) return;
 
-  // Get last row with data in column A (ignore status column G)
+  // Get last row with data in column A (ignore status column after Action)
   const colAValues = sheet.getRange('A:A').getValues();
   let lastRow = 1; // Start after header
   for (let i = colAValues.length - 1; i >= 0; i--) {
@@ -335,7 +366,17 @@ function saveData_(sheet, data, numCols) {
     }
   }
 
-  sheet.getRange(lastRow + 1, 1, data.length, numCols).setValues(data);
+  const startRow = lastRow + 1;
+  sheet.getRange(startRow, 1, data.length, numCols).setValues(data);
+
+  // Apply status colors to column A (Status column)
+  if (statusData && statusData.length > 0) {
+    for (let i = 0; i < statusData.length; i++) {
+      if (statusData[i] && statusData[i].color) {
+        sheet.getRange(startRow + i, 1).setBackground(statusData[i].color);
+      }
+    }
+  }
 }
 
 /**
