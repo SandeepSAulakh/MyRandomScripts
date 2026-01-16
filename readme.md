@@ -38,4 +38,4 @@ Just some random browser scripts I made to make my life a little easier. 🤷‍
 
 ---
 
-*Made with help from Claude* 🤖
+🤖
