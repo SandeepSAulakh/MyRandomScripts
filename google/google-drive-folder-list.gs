@@ -130,8 +130,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
       return;
     }
 
-    // Setup fresh sheet
-    setupSheet_(includeSubfolders);
+    // Show scanning status
     updateStatus_(sheet, '⏳ Scanning folders...', '#fff3cd');
 
     // Collect all top-level folder IDs
@@ -299,7 +298,16 @@ function setupSheet_(includeSubfolders) {
 function saveData_(sheet, data, numCols) {
   if (data.length === 0) return;
 
-  const lastRow = Math.max(sheet.getLastRow(), 1);
+  // Get last row with data in column A (ignore status column G)
+  const colAValues = sheet.getRange('A:A').getValues();
+  let lastRow = 1; // Start after header
+  for (let i = colAValues.length - 1; i >= 0; i--) {
+    if (colAValues[i][0] !== '') {
+      lastRow = i + 1;
+      break;
+    }
+  }
+
   sheet.getRange(lastRow + 1, 1, data.length, numCols).setValues(data);
 }
 
