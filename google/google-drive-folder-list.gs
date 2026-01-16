@@ -22,8 +22,8 @@ const CONFIG = {
   MAX_RUNTIME_MS: 5 * 60 * 1000  // 5 minutes (leave 1 min buffer before 6 min limit)
 };
 
-// Status cell location (top-right corner, after Action column)
-const STATUS_CELL = 'H1';
+// Status cell location (top-right corner, after Hints column)
+const STATUS_CELL = 'I1';
 
 /**
  * List folders only (no subfolders)
@@ -93,7 +93,7 @@ function updateStatus_(sheet, message, color) {
   statusCell.setBackground(color || '#fff3cd'); // Yellow by default
 
   // Also update next row for extra visibility
-  const timeCell = sheet.getRange('H2');
+  const timeCell = sheet.getRange('I2');
   timeCell.setValue(new Date().toLocaleTimeString());
 
   // Force the sheet to update visually
@@ -159,9 +159,9 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
   let currentFolderName = '';
 
   // Determine number of columns based on mode
-  // Folders only: Name, URL, Created, Modified, Action (5 cols)
-  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified, Action (6 cols)
-  const numCols = includeSubfolders ? 6 : 5;
+  // Folders only: Name, URL, Created, Modified, Action, Hints (6 cols)
+  // With subfolders: Parent Folder, Subfolder, Subfolder URL, Created, Modified, Action, Hints (7 cols)
+  const numCols = includeSubfolders ? 7 : 6;
 
   // Process folders
   while (state.currentIndex < state.folderIds.length) {
@@ -199,7 +199,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
         const subfolders = folder.getFolders();
 
         if (!subfolders.hasNext()) {
-          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified, '']);
+          data.push([folderName, '(no subfolders)', '', folderCreated, folderModified, '', '']);
         } else {
           while (subfolders.hasNext()) {
             const sub = subfolders.next();
@@ -209,20 +209,21 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
               sub.getUrl(),
               formatDate_(sub.getDateCreated()),
               formatDate_(sub.getLastUpdated()),
-              ''  // Action column
+              '',  // Action column
+              ''   // Hints column
             ]);
           }
         }
       } else {
         // Folders only - no subfolders
-        data.push([folderName, folderUrl, folderCreated, folderModified, '']);
+        data.push([folderName, folderUrl, folderCreated, folderModified, '', '']);
       }
     } catch (e) {
       // Skip inaccessible folders
       if (includeSubfolders) {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '', '']);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '', '', '']);
       } else {
-        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '']);
+        data.push(['(Error)', 'Could not access: ' + e.message, '', '', '', '']);
       }
     }
 
@@ -257,7 +258,7 @@ function processAllFolders_(rootFolderId, includeSubfolders) {
 
   // Show completion status
   updateStatus_(sheet, `✅ DONE! Listed ${state.totalFolders} folders`, '#d4edda');
-  sheet.getRange('H2').setValue('Completed: ' + new Date().toLocaleString());
+  sheet.getRange('I2').setValue('Completed: ' + new Date().toLocaleString());
 
   ui.alert(
     'Complete!',
@@ -275,20 +276,54 @@ function setupSheet_(includeSubfolders) {
 
   let headers;
   if (includeSubfolders) {
-    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified', 'Action'];
+    headers = ['Parent Folder', 'Subfolder', 'Subfolder URL', 'Date Created', 'Last Modified', 'Action', 'Hints'];
   } else {
-    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified', 'Action'];
+    headers = ['Folder Name', 'Folder URL', 'Date Created', 'Last Modified', 'Action', 'Hints'];
   }
 
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   sheet.setFrozenRows(1);
 
-  // Setup status area header (column H, after Action column)
-  sheet.getRange('H1').setValue('⏳ Starting...');
-  sheet.getRange('H1').setFontWeight('bold');
-  sheet.getRange('H1').setBackground('#fff3cd');
-  sheet.setColumnWidth(8, 350); // Make status column wider
+  // Add hints/instructions in the Hints column
+  const hintsCol = headers.length; // Last column before status
+  const hints = [
+    ['Type "Remove" or "X" to delete'],
+    ['Use menu: Find Empty Folders'],
+    ['Use menu: Remove Marked Folders'],
+    ['Deleted folders go to Trash'],
+    ['(recoverable for 30 days)']
+  ];
+  sheet.getRange(2, hintsCol, hints.length, 1).setValues(hints);
+  sheet.getRange(2, hintsCol, hints.length, 1).setFontColor('#666666');
+  sheet.getRange(2, hintsCol, hints.length, 1).setFontStyle('italic');
+  sheet.setColumnWidth(hintsCol, 200);
+
+  // Setup status area header (column I, after Hints column)
+  const statusCol = hintsCol + 1;
+  sheet.getRange(1, statusCol).setValue('⏳ Starting...');
+  sheet.getRange(1, statusCol).setFontWeight('bold');
+  sheet.getRange(1, statusCol).setBackground('#fff3cd');
+  sheet.setColumnWidth(statusCol, 350);
+
+  // Add usage instructions below status
+  const instructions = [
+    ['📋 HOW TO USE:'],
+    ['1. Review the folder list'],
+    ['2. Menu → Find Empty Folders'],
+    ['3. Type "Remove" in Action column'],
+    ['4. Menu → Remove Marked Folders'],
+    [''],
+    ['📌 ACTION COLUMN OPTIONS:'],
+    ['"Remove" or "Delete" or "X"'],
+    ['  → Marks folder for deletion'],
+    [''],
+    ['"📭 Empty" (auto-filled)'],
+    ['  → Folder has no files']
+  ];
+  sheet.getRange(3, statusCol, instructions.length, 1).setValues(instructions);
+  sheet.getRange(3, statusCol, 1, 1).setFontWeight('bold');
+  sheet.getRange(9, statusCol, 1, 1).setFontWeight('bold');
 
   return sheet;
 }
@@ -331,6 +366,43 @@ function resetAndStartOver() {
 }
 
 /**
+ * Check if a folder is empty (recursively checks subfolders too)
+ * Returns: 'empty' | 'has_files' | 'empty_tree' (has subfolders but all are empty)
+ */
+function checkFolderEmpty_(folder, depth = 0) {
+  // Limit recursion depth to avoid timeout
+  const MAX_DEPTH = 5;
+
+  const hasFiles = folder.getFiles().hasNext();
+  if (hasFiles) {
+    return 'has_files';
+  }
+
+  const subfolders = folder.getFolders();
+  if (!subfolders.hasNext()) {
+    // No files and no subfolders = completely empty
+    return 'empty';
+  }
+
+  // Has subfolders - check if they're all empty
+  if (depth >= MAX_DEPTH) {
+    // Too deep, just report as having subfolders
+    return 'has_subfolders';
+  }
+
+  while (subfolders.hasNext()) {
+    const sub = subfolders.next();
+    const subStatus = checkFolderEmpty_(sub, depth + 1);
+    if (subStatus === 'has_files') {
+      return 'has_files';
+    }
+  }
+
+  // All subfolders are empty
+  return 'empty_tree';
+}
+
+/**
  * Scan folders and mark empty ones (no files) in the Action column
  */
 function markEmptyFolders() {
@@ -338,7 +410,7 @@ function markEmptyFolders() {
   const ui = SpreadsheetApp.getUi();
 
   // Find columns dynamically from headers
-  const headers = sheet.getRange(1, 1, 1, 8).getValues()[0];
+  const headers = sheet.getRange(1, 1, 1, 10).getValues()[0];
 
   const actionCol = headers.indexOf('Action') + 1;
   if (actionCol === 0) {
@@ -369,8 +441,10 @@ function markEmptyFolders() {
   // Confirm with user
   const confirmResponse = ui.alert(
     'Scan for Empty Folders',
-    `This will scan ${data.length} folder(s) and mark any empty ones (no files) in the Action column.\n\n` +
-    'This may take a while for large lists.\n\nContinue?',
+    `This will scan ${data.length} folder(s) and check if they're empty.\n\n` +
+    '• Checks for files in the folder\n' +
+    '• Also checks subfolders recursively\n' +
+    '• May take a while for large lists\n\nContinue?',
     ui.ButtonSet.YES_NO
   );
 
@@ -378,10 +452,11 @@ function markEmptyFolders() {
     return;
   }
 
-  updateStatus_(sheet, `🔍 Scanning ${data.length} folders for empty ones...`, '#fff3cd');
+  updateStatus_(sheet, `🔍 Scanning ${data.length} folders (checking subfolders too)...`, '#fff3cd');
 
   let scanned = 0;
   let emptyCount = 0;
+  let emptyTreeCount = 0;
   let errorCount = 0;
 
   for (let i = 0; i < data.length; i++) {
@@ -409,47 +484,47 @@ function markEmptyFolders() {
 
     try {
       const folder = DriveApp.getFolderById(match[1]);
-      const hasFiles = folder.getFiles().hasNext();
-      const hasSubfolders = folder.getFolders().hasNext();
+      const status = checkFolderEmpty_(folder);
 
-      if (!hasFiles && !hasSubfolders) {
-        // Completely empty - no files AND no subfolders
+      if (status === 'empty') {
         sheet.getRange(i + 2, actionCol).setValue('📭 Empty');
         emptyCount++;
-      } else if (!hasFiles) {
-        // No files but has subfolders
-        sheet.getRange(i + 2, actionCol).setValue('📁 No files (has subfolders)');
-        emptyCount++;
+      } else if (status === 'empty_tree') {
+        sheet.getRange(i + 2, actionCol).setValue('📭 Empty (subfolders empty too)');
+        emptyTreeCount++;
       }
       // If has files, leave Action column as is
 
     } catch (e) {
       errorCount++;
-      // Don't overwrite existing action, just note if empty
     }
 
     scanned++;
 
     // Update progress every 10 folders
     if (scanned % 10 === 0) {
-      updateStatus_(sheet, `🔍 Scanned ${scanned}/${data.length} (${emptyCount} empty)...`, '#fff3cd');
+      const totalEmpty = emptyCount + emptyTreeCount;
+      updateStatus_(sheet, `🔍 Scanned ${scanned}/${data.length} (${totalEmpty} empty)...`, '#fff3cd');
     }
   }
 
   // Show completion
+  const totalEmpty = emptyCount + emptyTreeCount;
   if (errorCount === 0) {
-    updateStatus_(sheet, `✅ Scan complete: ${emptyCount} empty folder(s) found`, '#d4edda');
+    updateStatus_(sheet, `✅ Scan complete: ${totalEmpty} empty folder(s) found`, '#d4edda');
     ui.alert('Scan Complete',
       `Scanned ${scanned} folder(s).\n\n` +
-      `📭 Empty folders found: ${emptyCount}\n\n` +
+      `📭 Completely empty: ${emptyCount}\n` +
+      `📭 Empty (with empty subfolders): ${emptyTreeCount}\n\n` +
       'Empty folders are marked in the Action column.\n' +
-      'You can change the marker to "Remove" to delete them.',
+      'Change the marker to "Remove" to delete them.',
       ui.ButtonSet.OK);
   } else {
-    updateStatus_(sheet, `✅ Scan done: ${emptyCount} empty, ${errorCount} errors`, '#fff3cd');
+    updateStatus_(sheet, `✅ Scan done: ${totalEmpty} empty, ${errorCount} errors`, '#fff3cd');
     ui.alert('Scan Complete',
       `Scanned ${scanned} folder(s).\n\n` +
-      `📭 Empty folders found: ${emptyCount}\n` +
+      `📭 Completely empty: ${emptyCount}\n` +
+      `📭 Empty (with empty subfolders): ${emptyTreeCount}\n` +
       `⚠️ Errors (couldn't access): ${errorCount}\n\n` +
       'Empty folders are marked in the Action column.',
       ui.ButtonSet.OK);
