@@ -331,6 +331,132 @@ function resetAndStartOver() {
 }
 
 /**
+ * Scan folders and mark empty ones (no files) in the Action column
+ */
+function markEmptyFolders() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+
+  // Find columns dynamically from headers
+  const headers = sheet.getRange(1, 1, 1, 8).getValues()[0];
+
+  const actionCol = headers.indexOf('Action') + 1;
+  if (actionCol === 0) {
+    ui.alert('Error', 'Could not find Action column. Please re-run the folder listing.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Find URL column (either "Folder URL" or "Subfolder URL")
+  let urlCol = headers.indexOf('Folder URL') + 1;
+  if (urlCol === 0) {
+    urlCol = headers.indexOf('Subfolder URL') + 1;
+  }
+  if (urlCol === 0) {
+    ui.alert('Error', 'Could not find URL column. Please re-run the folder listing.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Get all data (skip header row)
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    ui.alert('No data', 'No folders to scan.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const dataRange = sheet.getRange(2, 1, lastRow - 1, actionCol);
+  const data = dataRange.getValues();
+
+  // Confirm with user
+  const confirmResponse = ui.alert(
+    'Scan for Empty Folders',
+    `This will scan ${data.length} folder(s) and mark any empty ones (no files) in the Action column.\n\n` +
+    'This may take a while for large lists.\n\nContinue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirmResponse !== ui.Button.YES) {
+    return;
+  }
+
+  updateStatus_(sheet, `🔍 Scanning ${data.length} folders for empty ones...`, '#fff3cd');
+
+  let scanned = 0;
+  let emptyCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    const url = data[i][urlCol - 1];
+    const currentAction = (data[i][actionCol - 1] || '').toString().trim();
+
+    // Skip rows that are already marked as removed or have errors
+    if (currentAction.includes('Removed') || currentAction.includes('Error') || !url) {
+      scanned++;
+      continue;
+    }
+
+    // Skip rows without valid Drive URLs
+    if (!url.includes('drive.google.com')) {
+      scanned++;
+      continue;
+    }
+
+    // Extract folder ID from URL
+    const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+    if (!match) {
+      scanned++;
+      continue;
+    }
+
+    try {
+      const folder = DriveApp.getFolderById(match[1]);
+      const hasFiles = folder.getFiles().hasNext();
+      const hasSubfolders = folder.getFolders().hasNext();
+
+      if (!hasFiles && !hasSubfolders) {
+        // Completely empty - no files AND no subfolders
+        sheet.getRange(i + 2, actionCol).setValue('📭 Empty');
+        emptyCount++;
+      } else if (!hasFiles) {
+        // No files but has subfolders
+        sheet.getRange(i + 2, actionCol).setValue('📁 No files (has subfolders)');
+        emptyCount++;
+      }
+      // If has files, leave Action column as is
+
+    } catch (e) {
+      errorCount++;
+      // Don't overwrite existing action, just note if empty
+    }
+
+    scanned++;
+
+    // Update progress every 10 folders
+    if (scanned % 10 === 0) {
+      updateStatus_(sheet, `🔍 Scanned ${scanned}/${data.length} (${emptyCount} empty)...`, '#fff3cd');
+    }
+  }
+
+  // Show completion
+  if (errorCount === 0) {
+    updateStatus_(sheet, `✅ Scan complete: ${emptyCount} empty folder(s) found`, '#d4edda');
+    ui.alert('Scan Complete',
+      `Scanned ${scanned} folder(s).\n\n` +
+      `📭 Empty folders found: ${emptyCount}\n\n` +
+      'Empty folders are marked in the Action column.\n' +
+      'You can change the marker to "Remove" to delete them.',
+      ui.ButtonSet.OK);
+  } else {
+    updateStatus_(sheet, `✅ Scan done: ${emptyCount} empty, ${errorCount} errors`, '#fff3cd');
+    ui.alert('Scan Complete',
+      `Scanned ${scanned} folder(s).\n\n` +
+      `📭 Empty folders found: ${emptyCount}\n` +
+      `⚠️ Errors (couldn't access): ${errorCount}\n\n` +
+      'Empty folders are marked in the Action column.',
+      ui.ButtonSet.OK);
+  }
+}
+
+/**
  * Remove folders marked with "Remove", "Delete", or "X" in the Action column
  * Moves folders to Trash (recoverable for 30 days)
  */
@@ -478,6 +604,7 @@ function onOpen() {
     .addItem('📂 List Folders + Subfolders', 'listFoldersWithSubfolders')
     .addSeparator()
     .addItem('▶️ Resume Listing', 'resumeListing')
+    .addItem('🔍 Find Empty Folders', 'markEmptyFolders')
     .addItem('🗑️ Remove Marked Folders', 'removeMarkedFolders')
     .addSeparator()
     .addItem('🔄 Reset / Start Over', 'resetAndStartOver')
