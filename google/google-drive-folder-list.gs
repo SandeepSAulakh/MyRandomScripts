@@ -661,6 +661,128 @@ function removeMarkedFolders() {
 }
 
 /**
+ * Remove all folders marked as empty (📭 Empty) in the Action column
+ * Moves folders to Trash (recoverable for 30 days)
+ */
+function removeEmptyFolders() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+
+  // Find columns dynamically from headers
+  const headers = sheet.getRange(1, 1, 1, 10).getValues()[0];
+
+  const actionCol = headers.indexOf('Action') + 1;
+  if (actionCol === 0) {
+    ui.alert('Error', 'Could not find Action column. Please re-run the folder listing.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Find URL column (either "Folder URL" or "Subfolder URL")
+  let urlCol = headers.indexOf('Folder URL') + 1;
+  if (urlCol === 0) {
+    urlCol = headers.indexOf('Subfolder URL') + 1;
+  }
+  if (urlCol === 0) {
+    ui.alert('Error', 'Could not find URL column. Please re-run the folder listing.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Get all data (skip header row)
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    ui.alert('No data', 'No folders to process.', ui.ButtonSet.OK);
+    return;
+  }
+
+  const dataRange = sheet.getRange(2, 1, lastRow - 1, actionCol);
+  const data = dataRange.getValues();
+
+  // Find rows marked as empty
+  const foldersToRemove = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const action = (data[i][actionCol - 1] || '').toString().trim();
+    const url = data[i][urlCol - 1];
+
+    // Check for empty folder markers
+    if (action.includes('📭 Empty') && url && url.includes('drive.google.com')) {
+      // Extract folder ID from URL
+      const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+      if (match) {
+        foldersToRemove.push({
+          row: i + 2,
+          name: data[i][0],
+          folderId: match[1]
+        });
+      }
+    }
+  }
+
+  if (foldersToRemove.length === 0) {
+    ui.alert('No empty folders found',
+      'No folders marked as empty (📭 Empty) in the Action column.\n\n' +
+      'Run "Find Empty Folders" first to scan and mark empty folders.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  // Confirm with user
+  const confirmResponse = ui.alert(
+    'Remove Empty Folders',
+    `Found ${foldersToRemove.length} empty folder(s) to remove:\n\n` +
+    foldersToRemove.slice(0, 10).map(f => `• ${f.name}`).join('\n') +
+    (foldersToRemove.length > 10 ? `\n... and ${foldersToRemove.length - 10} more` : '') +
+    '\n\nThese folders will be moved to Trash (recoverable for 30 days).\n\nContinue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirmResponse !== ui.Button.YES) {
+    return;
+  }
+
+  // Update status
+  updateStatus_(sheet, `🗑️ Removing ${foldersToRemove.length} empty folders...`, '#fff3cd');
+
+  let removed = 0;
+  let errors = 0;
+  const errorMessages = [];
+
+  for (const folder of foldersToRemove) {
+    try {
+      const driveFolder = DriveApp.getFolderById(folder.folderId);
+      driveFolder.setTrashed(true);
+
+      // Mark the row as removed
+      sheet.getRange(folder.row, actionCol).setValue('✓ Removed');
+      sheet.getRange(folder.row, 1, 1, actionCol).setBackground('#f0f0f0');
+
+      removed++;
+
+      if (removed % 5 === 0) {
+        updateStatus_(sheet, `🗑️ Removed ${removed}/${foldersToRemove.length} empty folders...`, '#fff3cd');
+      }
+    } catch (e) {
+      errors++;
+      errorMessages.push(`${folder.name}: ${e.message}`);
+      sheet.getRange(folder.row, actionCol).setValue('⚠️ Error');
+    }
+  }
+
+  // Show completion status
+  if (errors === 0) {
+    updateStatus_(sheet, `✅ Removed ${removed} empty folder(s) to Trash`, '#d4edda');
+    ui.alert('Complete!', `Successfully moved ${removed} empty folder(s) to Trash.\n\nYou can recover them from Trash within 30 days.`, ui.ButtonSet.OK);
+  } else {
+    updateStatus_(sheet, `⚠️ Removed ${removed}, ${errors} error(s)`, '#f8d7da');
+    ui.alert('Completed with errors',
+      `Removed: ${removed}\nErrors: ${errors}\n\n` +
+      errorMessages.slice(0, 5).join('\n') +
+      (errorMessages.length > 5 ? `\n... and ${errorMessages.length - 5} more errors` : ''),
+      ui.ButtonSet.OK);
+  }
+}
+
+/**
  * Add custom menu when spreadsheet opens
  */
 function onOpen() {
@@ -669,8 +791,10 @@ function onOpen() {
     .addItem('📁 List Folders Only', 'listFoldersOnly')
     .addItem('📂 List Folders + Subfolders', 'listFoldersWithSubfolders')
     .addSeparator()
-    .addItem('▶️ Resume Listing', 'resumeListing')
     .addItem('🔍 Find Empty Folders', 'markEmptyFolders')
+    .addItem('🗑️ Remove Empty Folders', 'removeEmptyFolders')
+    .addSeparator()
+    .addItem('▶️ Resume Listing', 'resumeListing')
     .addItem('🗑️ Remove Marked Folders', 'removeMarkedFolders')
     .addSeparator()
     .addItem('🔄 Reset / Start Over', 'resetAndStartOver')
