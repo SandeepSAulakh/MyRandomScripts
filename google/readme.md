@@ -13,16 +13,18 @@ Lists all folders and their immediate subfolders (one level deep) from Google Dr
 **Features:**
 - ✅ Lists folders and subfolders (one level only, no sub-sub-folders)
 - ✅ Outputs folder names, IDs, and URLs to a spreadsheet
+- ✅ **Live progress indicator** - see status update in real-time (cell G1)
+- ✅ Updates sheet every 10 folders so you can watch it work
+- ✅ Shows current folder name being processed
 - ✅ Batch processing for large folder structures
 - ✅ Resume capability if script times out
-- ✅ Progress tracking
 - ✅ Handles inaccessible folders gracefully
 
 **Configuration:**
 ```javascript
 const CONFIG = {
   FOLDER_ID: '',              // Set folder ID or leave empty to prompt
-  BATCH_SIZE: 50,             // Folders processed before saving
+  BATCH_SIZE: 10,             // Folders processed before updating (lower = more updates)
   MAX_RUNTIME_MS: 5 * 60 * 1000  // 5 min limit (1 min safety buffer)
 };
 ```
@@ -86,5 +88,6 @@ Folder List (menu)
 ## Changelog
 
 ### google-drive-folder-list.gs
+- **v1.2** - Added live progress indicator with real-time status updates
 - **v1.1** - Added batch processing, resume capability, progress tracking
 - **v1.0** - Initial version
