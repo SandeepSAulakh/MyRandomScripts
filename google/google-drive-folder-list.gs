@@ -356,15 +356,8 @@ function setupSheet_(includeSubfolders) {
 function saveData_(sheet, data, numCols, statusData) {
   if (data.length === 0) return;
 
-  // Get last row with data in column A (ignore status column after Action)
-  const colAValues = sheet.getRange('A:A').getValues();
-  let lastRow = 1; // Start after header
-  for (let i = colAValues.length - 1; i >= 0; i--) {
-    if (colAValues[i][0] !== '') {
-      lastRow = i + 1;
-      break;
-    }
-  }
+  // Get last row with data - use column B (Folder Name) since column A (Status) can be empty
+  const lastRow = Math.max(1, sheet.getLastRow());
 
   const startRow = lastRow + 1;
   sheet.getRange(startRow, 1, data.length, numCols).setValues(data);
@@ -824,6 +817,279 @@ function removeEmptyFolders() {
 }
 
 /**
+ * Update list - only add new folders that aren't already in the sheet
+ */
+function updateFolderList() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+
+  // Check if we have a saved folder ID
+  let rootFolderId = props.getProperty('ROOT_FOLDER_ID');
+  if (!rootFolderId && rootFolderId !== '') {
+    ui.alert('No folder configured',
+      'Please run "List Folders" first to set up the folder to monitor.\n\n' +
+      'After that, you can use "Update List" to add only new folders.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  // Determine mode from headers
+  const headers = sheet.getRange(1, 1, 1, 10).getValues()[0];
+  const includeSubfolders = headers.includes('Subfolder');
+
+  // Get existing folder URLs from sheet to avoid duplicates
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    ui.alert('No data', 'Sheet is empty. Please run "List Folders" first.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Find URL column
+  let urlCol = headers.indexOf('Folder URL') + 1;
+  if (urlCol === 0) {
+    urlCol = headers.indexOf('Subfolder URL') + 1;
+  }
+  if (urlCol === 0) {
+    ui.alert('Error', 'Could not find URL column.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Get all existing URLs
+  const existingUrls = new Set();
+  const urlData = sheet.getRange(2, urlCol, lastRow - 1, 1).getValues();
+  for (const row of urlData) {
+    if (row[0]) existingUrls.add(row[0]);
+  }
+
+  updateStatus_(sheet, '🔄 Checking for new folders...', '#fff3cd');
+
+  // Get root folder
+  let rootFolder;
+  try {
+    rootFolder = rootFolderId ? DriveApp.getFolderById(rootFolderId) : DriveApp.getRootFolder();
+  } catch (e) {
+    ui.alert('Error', 'Could not access folder: ' + e.message, ui.ButtonSet.OK);
+    return;
+  }
+
+  const numCols = includeSubfolders ? 6 : 5;
+  const data = [];
+  const statusData = [];
+  let newCount = 0;
+  let scanned = 0;
+
+  // Scan folders
+  const folders = rootFolder.getFolders();
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    scanned++;
+
+    if (includeSubfolders) {
+      const subfolders = folder.getFolders();
+      if (!subfolders.hasNext()) {
+        // Check if parent folder URL already exists
+        if (!existingUrls.has(folder.getUrl())) {
+          // This case doesn't apply well for subfolders mode
+        }
+      } else {
+        while (subfolders.hasNext()) {
+          const sub = subfolders.next();
+          const subUrl = sub.getUrl();
+
+          if (!existingUrls.has(subUrl)) {
+            const subDate = sub.getLastUpdated();
+            const subStatus = getUploadStatus_(subDate);
+            data.push([
+              subStatus ? subStatus.tag : '',
+              folder.getName(),
+              sub.getName(),
+              subUrl,
+              formatDate_(subDate),
+              ''
+            ]);
+            statusData.push(subStatus);
+            newCount++;
+          }
+        }
+      }
+    } else {
+      const folderUrl = folder.getUrl();
+      if (!existingUrls.has(folderUrl)) {
+        const folderDate = folder.getLastUpdated();
+        const folderStatus = getUploadStatus_(folderDate);
+        data.push([
+          folderStatus ? folderStatus.tag : '',
+          folder.getName(),
+          folderUrl,
+          formatDate_(folderDate),
+          ''
+        ]);
+        statusData.push(folderStatus);
+        newCount++;
+      }
+    }
+
+    if (scanned % 20 === 0) {
+      updateStatus_(sheet, `🔄 Scanned ${scanned} folders, found ${newCount} new...`, '#fff3cd');
+    }
+  }
+
+  // Save new folders
+  if (data.length > 0) {
+    saveData_(sheet, data, numCols, statusData);
+  }
+
+  // Update status
+  if (newCount === 0) {
+    updateStatus_(sheet, `✅ No new folders found (scanned ${scanned})`, '#d4edda');
+    ui.alert('Up to date', `Scanned ${scanned} folders.\n\nNo new folders found.`, ui.ButtonSet.OK);
+  } else {
+    updateStatus_(sheet, `✅ Added ${newCount} new folder(s)`, '#d4edda');
+    ui.alert('Update complete', `Scanned ${scanned} folders.\n\nAdded ${newCount} new folder(s) to the list.`, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Auto-update function for scheduled trigger (runs silently)
+ */
+function autoUpdateFolderList() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const props = PropertiesService.getScriptProperties();
+
+  let rootFolderId = props.getProperty('ROOT_FOLDER_ID');
+  if (!rootFolderId && rootFolderId !== '') {
+    return; // No folder configured, skip
+  }
+
+  // Determine mode from headers
+  const headers = sheet.getRange(1, 1, 1, 10).getValues()[0];
+  const includeSubfolders = headers.includes('Subfolder');
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return;
+
+  // Find URL column
+  let urlCol = headers.indexOf('Folder URL') + 1;
+  if (urlCol === 0) urlCol = headers.indexOf('Subfolder URL') + 1;
+  if (urlCol === 0) return;
+
+  // Get existing URLs
+  const existingUrls = new Set();
+  const urlData = sheet.getRange(2, urlCol, lastRow - 1, 1).getValues();
+  for (const row of urlData) {
+    if (row[0]) existingUrls.add(row[0]);
+  }
+
+  let rootFolder;
+  try {
+    rootFolder = rootFolderId ? DriveApp.getFolderById(rootFolderId) : DriveApp.getRootFolder();
+  } catch (e) {
+    return;
+  }
+
+  const numCols = includeSubfolders ? 6 : 5;
+  const data = [];
+  const statusData = [];
+
+  const folders = rootFolder.getFolders();
+  while (folders.hasNext()) {
+    const folder = folders.next();
+
+    if (includeSubfolders) {
+      const subfolders = folder.getFolders();
+      while (subfolders.hasNext()) {
+        const sub = subfolders.next();
+        const subUrl = sub.getUrl();
+        if (!existingUrls.has(subUrl)) {
+          const subDate = sub.getLastUpdated();
+          const subStatus = getUploadStatus_(subDate);
+          data.push([
+            subStatus ? subStatus.tag : '',
+            folder.getName(),
+            sub.getName(),
+            subUrl,
+            formatDate_(subDate),
+            ''
+          ]);
+          statusData.push(subStatus);
+        }
+      }
+    } else {
+      const folderUrl = folder.getUrl();
+      if (!existingUrls.has(folderUrl)) {
+        const folderDate = folder.getLastUpdated();
+        const folderStatus = getUploadStatus_(folderDate);
+        data.push([
+          folderStatus ? folderStatus.tag : '',
+          folder.getName(),
+          folderUrl,
+          formatDate_(folderDate),
+          ''
+        ]);
+        statusData.push(folderStatus);
+      }
+    }
+  }
+
+  if (data.length > 0) {
+    saveData_(sheet, data, numCols, statusData);
+    // Update timestamp
+    sheet.getRange('G2').setValue('Auto-updated: ' + new Date().toLocaleString());
+  }
+}
+
+/**
+ * Set up automatic nightly updates
+ */
+function setupAutoUpdate() {
+  const ui = SpreadsheetApp.getUi();
+
+  // Remove existing triggers first
+  const triggers = ScriptApp.getProjectTriggers();
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'autoUpdateFolderList') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  }
+
+  // Create new daily trigger (runs between 1-2 AM)
+  ScriptApp.newTrigger('autoUpdateFolderList')
+    .timeBased()
+    .everyDays(1)
+    .atHour(1)
+    .create();
+
+  ui.alert('Auto-Update Enabled',
+    'The folder list will automatically update every night (1-2 AM).\n\n' +
+    'New folders will be added to the list automatically.\n\n' +
+    'To disable, run "Disable Auto-Update" from the menu.',
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Disable automatic updates
+ */
+function disableAutoUpdate() {
+  const ui = SpreadsheetApp.getUi();
+
+  const triggers = ScriptApp.getProjectTriggers();
+  let removed = 0;
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'autoUpdateFolderList') {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  }
+
+  if (removed > 0) {
+    ui.alert('Auto-Update Disabled', 'Automatic nightly updates have been disabled.', ui.ButtonSet.OK);
+  } else {
+    ui.alert('No Auto-Update', 'Auto-update was not enabled.', ui.ButtonSet.OK);
+  }
+}
+
+/**
  * Add custom menu when spreadsheet opens
  */
 function onOpen() {
@@ -831,6 +1097,7 @@ function onOpen() {
     .createMenu('Folder List')
     .addItem('📁 List Folders Only', 'listFoldersOnly')
     .addItem('📂 List Folders + Subfolders', 'listFoldersWithSubfolders')
+    .addItem('🔄 Update List (Add New Only)', 'updateFolderList')
     .addSeparator()
     .addItem('🔍 Find Empty Folders', 'markEmptyFolders')
     .addItem('🗑️ Remove Empty Folders', 'removeEmptyFolders')
@@ -838,6 +1105,8 @@ function onOpen() {
     .addItem('▶️ Resume Listing', 'resumeListing')
     .addItem('🗑️ Remove Marked Folders', 'removeMarkedFolders')
     .addSeparator()
+    .addItem('⏰ Enable Auto-Update (Nightly)', 'setupAutoUpdate')
+    .addItem('⏹️ Disable Auto-Update', 'disableAutoUpdate')
     .addItem('🔄 Reset / Start Over', 'resetAndStartOver')
     .addToUi();
 }
