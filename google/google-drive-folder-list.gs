@@ -356,8 +356,15 @@ function setupSheet_(includeSubfolders) {
 function saveData_(sheet, data, numCols, statusData) {
   if (data.length === 0) return;
 
-  // Get last row with data - use column B (Folder Name) since column A (Status) can be empty
-  const lastRow = Math.max(1, sheet.getLastRow());
+  // Get last row with data in column B (Folder Name) - avoids counting instruction text in column G
+  const colBValues = sheet.getRange('B:B').getValues();
+  let lastRow = 1; // Start after header
+  for (let i = colBValues.length - 1; i >= 0; i--) {
+    if (colBValues[i][0] !== '') {
+      lastRow = i + 1;
+      break;
+    }
+  }
 
   const startRow = lastRow + 1;
   sheet.getRange(startRow, 1, data.length, numCols).setValues(data);
