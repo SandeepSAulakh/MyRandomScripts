@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Udemy Auto Close Non-Free / Auto Enroll Free
 // @namespace    http://tampermonkey.net/
-// @version      2.5.1
+// @version      2.7
 // @description  Auto closes Udemy course tab if not 100% off or already enrolled, auto enrolls if free. Handles rate limiting.
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -49,7 +49,7 @@
     const RETRY_KEY = 'udemy_retry_' + window.location.pathname;
     const FORBIDDEN_KEY = 'udemy_forbidden_' + window.location.pathname;
 
-    console.log('Udemy auto-enroll script v2.5.1 loaded!');
+    console.log('Udemy auto-enroll script v2.7 loaded!');
 
     // ==================== FORBIDDEN PAGE DETECTION ====================
 
@@ -311,6 +311,12 @@
         const enrolledBox = document.querySelector('[data-purpose="enrolled-box"]');
         if (enrolledBox) return true;
 
+        // Check for "You purchased this course" message (new UI)
+        const enrolledMessage = document.querySelector('[class*="enrolled-message"]');
+        if (enrolledMessage && enrolledMessage.textContent.toLowerCase().includes('purchased')) {
+            return true;
+        }
+
         // Check for "Go to course" button (new UI)
         const buyNowBtn = document.querySelector('button[data-purpose="buy-now-button"]');
         if (buyNowBtn) {
@@ -327,6 +333,12 @@
         }
 
         return false;
+    }
+
+    // Fast close for already enrolled - no need to wait
+    function fastClose() {
+        console.log('Fast closing (already enrolled)...');
+        window.close();
     }
 
     // Check if course is free
@@ -358,6 +370,17 @@
         if (isForbiddenPage()) {
             await handleForbidden();
             return;
+        }
+
+        // ==================== EARLY ENROLLED CHECK (NO LOCK NEEDED) ====================
+        // Check immediately if already enrolled - no need to wait for lock or add delays
+        if (window.location.href.includes('/course/')) {
+            if (isAlreadyEnrolled()) {
+                console.log('Already enrolled (early check). Fast closing...');
+                clearRetryCount();
+                fastClose();
+                return;
+            }
         }
 
         // Wait for global lock (one tab at a time)
@@ -446,8 +469,9 @@
             clearRetryCount();
 
             if (result.type === 'enrolled') {
-                console.log('Already enrolled. Closing tab...');
-                await humanClose();
+                console.log('Already enrolled. Fast closing...');
+                releaseLock();
+                fastClose();
                 return;
             }
 
