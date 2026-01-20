@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.0.6
 // @description  Adds a button to open all idownloadcoupon.com REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -122,20 +122,24 @@
         stopBtn.id = 'reddit-stop-btn';
         stopBtn.textContent = '⛔ STOP';
         stopBtn.style.cssText = `
-            position: fixed;
-            bottom: 150px;
-            right: 250px;
-            z-index: 99999;
-            padding: 12px 20px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: fixed !important;
+            bottom: 150px !important;
+            right: 280px !important;
+            z-index: 99999 !important;
+            padding: 15px 25px !important;
+            background: #dc3545 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
             display: none;
+            min-height: 50px !important;
+            line-height: 1.4 !important;
+            overflow: visible !important;
+            box-sizing: border-box !important;
         `;
 
         stopBtn.onclick = function() {
@@ -230,7 +234,7 @@
     }
 
     // Initialize
-    console.log('Reddit REDEEM OFFER script v1.0.5 loaded!');
+    console.log('Reddit REDEEM OFFER script v1.0.6 loaded!');
 
     // Wait for page to load then add buttons
     setTimeout(addButtons, 2000);
