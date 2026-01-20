@@ -45,7 +45,7 @@ Adds a floating button to Gmail that opens all "REDEEM OFFER" links in backgroun
 
 ---
 
-### 3. `reddit-open-udemy-links.user.js` (v1.0)
+### 3. `reddit-open-udemy-links.user.js` (v1.0.5)
 
 Adds a floating button on Reddit to open all "REDEEM OFFER" links from idownloadcoupon.com.
 
@@ -159,4 +159,5 @@ Next batch...
 - **v1.0** - Initial version
 
 ### reddit-open-udemy-links.user.js
+- **v1.0.5** - Fixed button styling for Reddit CSS compatibility
 - **v1.0** - Initial version with batch processing, stop button, idownloadcoupon.com filter
