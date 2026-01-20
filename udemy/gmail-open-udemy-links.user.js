@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gmail Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Adds a button to open all REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -16,25 +16,24 @@
 (function() {
     'use strict';
 
+    console.log('Gmail REDEEM OFFER script v1.4 loaded!');
+
     // Global state for stop functionality
     let isProcessing = false;
     let shouldStop = false;
 
     // Configuration
     const CONFIG = {
-        // Tabs per batch
         BATCH_SIZE: 5,
-        // 2-4 sec between tabs in same batch
         MIN_DELAY_IN_BATCH: 2000,
         MAX_DELAY_IN_BATCH: 4000,
-        // 10-15 sec pause between batches
         MIN_BATCH_PAUSE: 10000,
         MAX_BATCH_PAUSE: 15000
     };
 
     const randomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-    // Interruptible sleep - checks shouldStop flag
+    // Interruptible sleep
     function sleep(ms) {
         return new Promise(resolve => {
             const checkInterval = 500;
@@ -49,28 +48,63 @@
         });
     }
 
+    // Find all REDEEM OFFER links
+    function findRedeemLinks() {
+        const links = document.querySelectorAll('a');
+        const redeemLinks = [];
+
+        for (const link of links) {
+            if (link.textContent.trim() === 'REDEEM OFFER') {
+                redeemLinks.push(link.href);
+            }
+        }
+
+        // Remove duplicates
+        return [...new Set(redeemLinks)];
+    }
+
+    // Update button visibility based on links found
+    function updateButtonVisibility() {
+        const btn = document.getElementById('redeem-all-btn');
+        if (!btn) return;
+
+        const links = findRedeemLinks();
+
+        if (links.length > 0 && !isProcessing) {
+            btn.style.display = 'block';
+            btn.textContent = `🎓 Open ${links.length} REDEEM OFFER`;
+        } else if (!isProcessing) {
+            btn.style.display = 'none';
+        }
+    }
+
     // Add floating buttons
     function addButton() {
         if (document.getElementById('redeem-all-btn')) return;
 
-        // Main button
+        // Main button (hidden by default)
         const btn = document.createElement('button');
         btn.id = 'redeem-all-btn';
-        btn.textContent = '🎓 Open All REDEEM OFFER';
+        btn.textContent = '🎓 Open REDEEM OFFER';
         btn.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 9999;
-            padding: 12px 20px;
-            background: #1a73e8;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 99999 !important;
+            padding: 0 25px !important;
+            background: #1a73e8 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+            display: none;
+            height: 50px !important;
+            line-height: 50px !important;
+            white-space: nowrap !important;
+            min-width: 200px !important;
         `;
 
         // Stop button (hidden by default)
@@ -78,20 +112,22 @@
         stopBtn.id = 'redeem-stop-btn';
         stopBtn.textContent = '⛔ STOP';
         stopBtn.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 220px;
-            z-index: 9999;
-            padding: 12px 20px;
-            background: #dc3545;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 250px !important;
+            z-index: 99999 !important;
+            padding: 0 25px !important;
+            background: #dc3545 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
             display: none;
+            height: 50px !important;
+            line-height: 50px !important;
         `;
 
         stopBtn.onclick = function() {
@@ -104,14 +140,7 @@
         btn.onclick = async function() {
             if (isProcessing) return;
 
-            const links = document.querySelectorAll('a');
-            const redeemLinks = [];
-
-            for (const link of links) {
-                if (link.textContent.trim() === 'REDEEM OFFER') {
-                    redeemLinks.push(link.href);
-                }
-            }
+            const redeemLinks = findRedeemLinks();
 
             if (redeemLinks.length === 0) {
                 alert('No REDEEM OFFER links found!');
@@ -139,14 +168,12 @@
 
                 console.log(`--- Batch ${batchNum}/${totalBatches} (tabs ${start + 1}-${end}) ---`);
 
-                // Open tabs in this batch
                 for (let i = start; i < end && !shouldStop; i++) {
                     GM_openInTab(redeemLinks[i], { active: false, insert: true });
                     opened++;
                     btn.textContent = `🎓 Batch ${batchNum}/${totalBatches}: ${opened}/${redeemLinks.length}`;
                     console.log(`Opened ${opened}/${redeemLinks.length}: ${redeemLinks[i]}`);
 
-                    // Random delay between tabs in same batch (except last in batch)
                     if (i < end - 1 && !shouldStop) {
                         const delay = randomDelay(CONFIG.MIN_DELAY_IN_BATCH, CONFIG.MAX_DELAY_IN_BATCH);
                         console.log(`Waiting ${(delay/1000).toFixed(1)}s before next tab...`);
@@ -154,7 +181,6 @@
                     }
                 }
 
-                // Pause between batches (except after last batch)
                 if (batch < totalBatches - 1 && !shouldStop) {
                     const batchPause = randomDelay(CONFIG.MIN_BATCH_PAUSE, CONFIG.MAX_BATCH_PAUSE);
                     console.log(`Batch ${batchNum} complete. Pausing ${(batchPause/1000).toFixed(0)}s before next batch...`);
@@ -170,9 +196,11 @@
             isProcessing = false;
             shouldStop = false;
             stopBtn.style.display = 'none';
-            btn.textContent = '🎓 Open All REDEEM OFFER';
             btn.style.background = '#1a73e8';
             btn.disabled = false;
+
+            // Update button with current count
+            updateButtonVisibility();
 
             if (wasStopped) {
                 console.log(`⏹️ Stopped! Opened ${opened}/${redeemLinks.length} links.`);
@@ -185,12 +213,23 @@
 
         document.body.appendChild(btn);
         document.body.appendChild(stopBtn);
+
+        // Initial visibility check
+        updateButtonVisibility();
     }
-    
+
+    // Initialize
     setTimeout(addButton, 2000);
-    
+
+    // Watch for page changes (Gmail is a SPA)
     const observer = new MutationObserver(() => {
-        setTimeout(addButton, 1000);
+        setTimeout(() => {
+            addButton();
+            updateButtonVisibility();
+        }, 1000);
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // Also check periodically
+    setInterval(updateButtonVisibility, 3000);
 })();
