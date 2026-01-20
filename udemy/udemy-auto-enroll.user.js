@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Udemy Auto Close Non-Free / Auto Enroll Free
 // @namespace    http://tampermonkey.net/
-// @version      2.7
+// @version      2.8
 // @description  Auto closes Udemy course tab if not 100% off or already enrolled, auto enrolls if free. Handles rate limiting.
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -49,7 +49,7 @@
     const RETRY_KEY = 'udemy_retry_' + window.location.pathname;
     const FORBIDDEN_KEY = 'udemy_forbidden_' + window.location.pathname;
 
-    console.log('Udemy auto-enroll script v2.7 loaded!');
+    console.log('Udemy auto-enroll script v2.8 loaded!');
 
     // ==================== FORBIDDEN PAGE DETECTION ====================
 
@@ -309,11 +309,23 @@
     function isAlreadyEnrolled() {
         // Check for enrolled box
         const enrolledBox = document.querySelector('[data-purpose="enrolled-box"]');
-        if (enrolledBox) return true;
+        if (enrolledBox) {
+            console.log('Enrolled detected: data-purpose="enrolled-box"');
+            return true;
+        }
 
-        // Check for "You purchased this course" message (new UI)
+        // Check for "You purchased this course" span (new UI)
+        // Class pattern: enrolled-box-module-scss-module__*__enrolled-message
+        const enrolledSpan = document.querySelector('span[class*="enrolled-message"]');
+        if (enrolledSpan && enrolledSpan.textContent.toLowerCase().includes('purchased')) {
+            console.log('Enrolled detected: span with enrolled-message class');
+            return true;
+        }
+
+        // Also check any element with enrolled-message in class
         const enrolledMessage = document.querySelector('[class*="enrolled-message"]');
         if (enrolledMessage && enrolledMessage.textContent.toLowerCase().includes('purchased')) {
+            console.log('Enrolled detected: element with enrolled-message class');
             return true;
         }
 
@@ -322,6 +334,7 @@
         if (buyNowBtn) {
             const btnText = buyNowBtn.textContent.toLowerCase().trim();
             if (btnText.includes('go to course')) {
+                console.log('Enrolled detected: Go to course button');
                 return true;
             }
         }
@@ -329,6 +342,7 @@
         // Check via .ud-btn-label (old UI)
         const goToCourseLabel = document.querySelector('[data-purpose="buy-now-button"] .ud-btn-label');
         if (goToCourseLabel && goToCourseLabel.textContent.trim().toLowerCase() === 'go to course') {
+            console.log('Enrolled detected: Go to course label');
             return true;
         }
 
@@ -373,13 +387,53 @@
         }
 
         // ==================== EARLY ENROLLED CHECK (NO LOCK NEEDED) ====================
-        // Check immediately if already enrolled - no need to wait for lock or add delays
+        // Wait briefly for page content to load, then check if already enrolled
         if (window.location.href.includes('/course/')) {
-            if (isAlreadyEnrolled()) {
-                console.log('Already enrolled (early check). Fast closing...');
-                clearRetryCount();
-                fastClose();
-                return;
+            console.log('Checking for enrolled status (fast path)...');
+
+            // Quick poll for enrolled indicators (max 5 seconds)
+            const enrolledSelectors = [
+                '[data-purpose="enrolled-box"]',
+                'span[class*="enrolled-message"]',
+                '[class*="enrolled-message"]'
+            ];
+
+            const startTime = Date.now();
+            const maxWait = 5000;
+
+            while (Date.now() - startTime < maxWait) {
+                // Check all enrolled selectors
+                for (const selector of enrolledSelectors) {
+                    const el = document.querySelector(selector);
+                    if (el) {
+                        console.log(`Found enrolled element: ${selector}`);
+                        if (isAlreadyEnrolled()) {
+                            console.log('Already enrolled (early check). Fast closing...');
+                            clearRetryCount();
+                            fastClose();
+                            return;
+                        }
+                    }
+                }
+
+                // Also check for "Go to course" button
+                const buyBtn = document.querySelector('button[data-purpose="buy-now-button"]');
+                if (buyBtn && buyBtn.textContent.toLowerCase().includes('go to course')) {
+                    console.log('Found "Go to course" button');
+                    clearRetryCount();
+                    fastClose();
+                    return;
+                }
+
+                // If we found price/enroll elements, stop waiting (not enrolled)
+                const priceEl = document.querySelector('[data-purpose="course-price-text"]');
+                const enrollBtn = document.querySelector('button[data-purpose="buy-now-button"]');
+                if (priceEl || (enrollBtn && enrollBtn.textContent.toLowerCase().includes('enroll'))) {
+                    console.log('Found price/enroll elements - not enrolled, proceeding...');
+                    break;
+                }
+
+                await bgSleep(300);
             }
         }
 
