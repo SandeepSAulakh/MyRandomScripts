@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.0.6
+// @version      1.0.7
 // @description  Adds a button to open all idownloadcoupon.com REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -100,7 +100,7 @@
             bottom: 150px !important;
             right: 20px !important;
             z-index: 99999 !important;
-            padding: 15px 25px !important;
+            padding: 0 25px !important;
             background: #ff4500 !important;
             color: white !important;
             border: none !important;
@@ -111,10 +111,11 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
             white-space: nowrap !important;
             min-width: 250px !important;
-            min-height: 50px !important;
-            line-height: 1.4 !important;
+            height: 50px !important;
+            line-height: 50px !important;
             overflow: visible !important;
             box-sizing: border-box !important;
+            vertical-align: middle !important;
         `;
 
         // Stop button (hidden by default)
@@ -126,7 +127,7 @@
             bottom: 150px !important;
             right: 280px !important;
             z-index: 99999 !important;
-            padding: 15px 25px !important;
+            padding: 0 25px !important;
             background: #dc3545 !important;
             color: white !important;
             border: none !important;
@@ -136,10 +137,11 @@
             cursor: pointer !important;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
             display: none;
-            min-height: 50px !important;
-            line-height: 1.4 !important;
+            height: 50px !important;
+            line-height: 50px !important;
             overflow: visible !important;
             box-sizing: border-box !important;
+            vertical-align: middle !important;
         `;
 
         stopBtn.onclick = function() {
@@ -234,7 +236,7 @@
     }
 
     // Initialize
-    console.log('Reddit REDEEM OFFER script v1.0.6 loaded!');
+    console.log('Reddit REDEEM OFFER script v1.0.7 loaded!');
 
     // Wait for page to load then add buttons
     setTimeout(addButtons, 2000);
