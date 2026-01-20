@@ -120,9 +120,9 @@ function getUploadStatus_(date) {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays <= 7) {
-    return { tag: 'New Upload', color: '#d4edda' };  // Light green
+    return { tag: 'New Upload', color: '#c8e6c9' };  // Light green (0-7 days)
   } else if (diffDays <= 30) {
-    return { tag: 'Recent Upload', color: '#fff3cd' };  // Light yellow
+    return { tag: 'Recent Upload', color: '#fff59d' };  // Brighter yellow (8-30 days)
   }
   return null;
 }
