@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gmail Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
+// @version      1.3
 // @description  Adds a button to open all REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -15,11 +15,45 @@
 
 (function() {
     'use strict';
-    
-    // Add a floating button
+
+    // Global state for stop functionality
+    let isProcessing = false;
+    let shouldStop = false;
+
+    // Configuration
+    const CONFIG = {
+        // Tabs per batch
+        BATCH_SIZE: 5,
+        // 2-4 sec between tabs in same batch
+        MIN_DELAY_IN_BATCH: 2000,
+        MAX_DELAY_IN_BATCH: 4000,
+        // 10-15 sec pause between batches
+        MIN_BATCH_PAUSE: 10000,
+        MAX_BATCH_PAUSE: 15000
+    };
+
+    const randomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    // Interruptible sleep - checks shouldStop flag
+    function sleep(ms) {
+        return new Promise(resolve => {
+            const checkInterval = 500;
+            let elapsed = 0;
+            const timer = setInterval(() => {
+                elapsed += checkInterval;
+                if (shouldStop || elapsed >= ms) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, checkInterval);
+        });
+    }
+
+    // Add floating buttons
     function addButton() {
         if (document.getElementById('redeem-all-btn')) return;
-        
+
+        // Main button
         const btn = document.createElement('button');
         btn.id = 'redeem-all-btn';
         btn.textContent = '🎓 Open All REDEEM OFFER';
@@ -38,8 +72,38 @@
             cursor: pointer;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
-        
+
+        // Stop button (hidden by default)
+        const stopBtn = document.createElement('button');
+        stopBtn.id = 'redeem-stop-btn';
+        stopBtn.textContent = '⛔ STOP';
+        stopBtn.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 220px;
+            z-index: 9999;
+            padding: 12px 20px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: none;
+        `;
+
+        stopBtn.onclick = function() {
+            shouldStop = true;
+            stopBtn.textContent = '⏹️ Stopping...';
+            stopBtn.disabled = true;
+            console.log('Stop requested by user...');
+        };
+
         btn.onclick = async function() {
+            if (isProcessing) return;
+
             const links = document.querySelectorAll('a');
             const redeemLinks = [];
 
@@ -54,30 +118,21 @@
                 return;
             }
 
-            // Configuration
-            const CONFIG = {
-                // Tabs per batch
-                BATCH_SIZE: 5,
-                // 3-6 sec between tabs in same batch
-                MIN_DELAY_IN_BATCH: 3000,
-                MAX_DELAY_IN_BATCH: 6000,
-                // 30-45 sec pause between batches
-                MIN_BATCH_PAUSE: 30000,
-                MAX_BATCH_PAUSE: 45000
-            };
-
-            const randomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+            // Reset state
+            isProcessing = true;
+            shouldStop = false;
+            stopBtn.style.display = 'block';
+            stopBtn.textContent = '⛔ STOP';
+            stopBtn.disabled = false;
 
             btn.textContent = `🎓 Opening 0/${redeemLinks.length}...`;
             btn.disabled = true;
-            // Orange while processing
             btn.style.background = '#ff9800';
 
             let opened = 0;
             const totalBatches = Math.ceil(redeemLinks.length / CONFIG.BATCH_SIZE);
 
-            for (let batch = 0; batch < totalBatches; batch++) {
+            for (let batch = 0; batch < totalBatches && !shouldStop; batch++) {
                 const start = batch * CONFIG.BATCH_SIZE;
                 const end = Math.min(start + CONFIG.BATCH_SIZE, redeemLinks.length);
                 const batchNum = batch + 1;
@@ -85,42 +140,51 @@
                 console.log(`--- Batch ${batchNum}/${totalBatches} (tabs ${start + 1}-${end}) ---`);
 
                 // Open tabs in this batch
-                for (let i = start; i < end; i++) {
+                for (let i = start; i < end && !shouldStop; i++) {
                     GM_openInTab(redeemLinks[i], { active: false, insert: true });
                     opened++;
                     btn.textContent = `🎓 Batch ${batchNum}/${totalBatches}: ${opened}/${redeemLinks.length}`;
                     console.log(`Opened ${opened}/${redeemLinks.length}: ${redeemLinks[i]}`);
 
                     // Random delay between tabs in same batch (except last in batch)
-                    if (i < end - 1) {
+                    if (i < end - 1 && !shouldStop) {
                         const delay = randomDelay(CONFIG.MIN_DELAY_IN_BATCH, CONFIG.MAX_DELAY_IN_BATCH);
                         console.log(`Waiting ${(delay/1000).toFixed(1)}s before next tab...`);
                         await sleep(delay);
                     }
                 }
 
-                // Longer pause between batches (except after last batch)
-                if (batch < totalBatches - 1) {
+                // Pause between batches (except after last batch)
+                if (batch < totalBatches - 1 && !shouldStop) {
                     const batchPause = randomDelay(CONFIG.MIN_BATCH_PAUSE, CONFIG.MAX_BATCH_PAUSE);
                     console.log(`Batch ${batchNum} complete. Pausing ${(batchPause/1000).toFixed(0)}s before next batch...`);
                     btn.textContent = `⏸️ Pausing ${Math.round(batchPause/1000)}s... (${opened}/${redeemLinks.length})`;
-                    // Purple during pause
                     btn.style.background = '#9c27b0';
                     await sleep(batchPause);
-                    // Back to orange
                     btn.style.background = '#ff9800';
                 }
             }
 
+            // Reset UI
+            const wasStopped = shouldStop;
+            isProcessing = false;
+            shouldStop = false;
+            stopBtn.style.display = 'none';
             btn.textContent = '🎓 Open All REDEEM OFFER';
-            // Back to blue
             btn.style.background = '#1a73e8';
             btn.disabled = false;
-            console.log(`✅ Done! Opened ${redeemLinks.length} REDEEM OFFER links in ${totalBatches} batches.`);
-            alert(`Done! Opened ${redeemLinks.length} links in ${totalBatches} batches.`);
+
+            if (wasStopped) {
+                console.log(`⏹️ Stopped! Opened ${opened}/${redeemLinks.length} links.`);
+                alert(`Stopped! Opened ${opened} of ${redeemLinks.length} links.`);
+            } else {
+                console.log(`✅ Done! Opened ${redeemLinks.length} REDEEM OFFER links in ${totalBatches} batches.`);
+                alert(`Done! Opened ${redeemLinks.length} links in ${totalBatches} batches.`);
+            }
         };
-        
+
         document.body.appendChild(btn);
+        document.body.appendChild(stopBtn);
     }
     
     setTimeout(addButton, 2000);
