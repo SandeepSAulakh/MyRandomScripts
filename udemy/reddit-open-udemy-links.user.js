@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.4
 // @description  Adds a button to open all idownloadcoupon.com REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -96,22 +96,24 @@
         btn.id = 'reddit-redeem-btn';
         btn.textContent = '🎓 Open REDEEM OFFER';
         btn.style.cssText = `
-            position: fixed;
-            bottom: 150px;
-            right: 20px;
-            z-index: 99999;
-            padding: 12px 20px;
-            background: #ff4500;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            display: none;
-            white-space: nowrap;
-            min-width: 200px;
+            position: fixed !important;
+            bottom: 150px !important;
+            right: 20px !important;
+            z-index: 99999 !important;
+            padding: 12px 20px !important;
+            background: #ff4500 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-size: 14px !important;
+            font-weight: bold !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3) !important;
+            white-space: nowrap !important;
+            min-width: 250px !important;
+            width: auto !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
         `;
 
         // Stop button (hidden by default)
@@ -227,7 +229,7 @@
     }
 
     // Initialize
-    console.log('Reddit REDEEM OFFER script v1.0.3 loaded!');
+    console.log('Reddit REDEEM OFFER script v1.0.4 loaded!');
 
     // Wait for page to load then add buttons
     setTimeout(addButtons, 2000);
