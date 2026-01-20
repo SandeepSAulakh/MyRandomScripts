@@ -3,6 +3,11 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.5
 // @description  Auto removes watched videos from Watch Later playlist
+// @author       SandeepSAulakh
+// @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
+// @supportURL   https://github.com/SandeepSAulakh/MyRandomScripts/issues
+// @updateURL    https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/youtube/youtube-remove-watched.user.js
+// @downloadURL  https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/youtube/youtube-remove-watched.user.js
 // @match        https://www.youtube.com/playlist?list=WL*
 // @match        https://www.youtube.com/playlist?list=WL
 // @run-at       document-idle

@@ -2,7 +2,12 @@
 // @name         Gmail Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
 // @version      1.2
-// @description  Adds a button to open all REDEEM OFFER links in new tabs
+// @description  Adds a button to open all REDEEM OFFER links in new tabs with batch processing
+// @author       SandeepSAulakh
+// @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
+// @supportURL   https://github.com/SandeepSAulakh/MyRandomScripts/issues
+// @updateURL    https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/udemy/gmail-open-udemy-links.user.js
+// @downloadURL  https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/udemy/gmail-open-udemy-links.user.js
 // @match        https://mail.google.com/mail/*
 // @run-at       document-idle
 // @grant        GM_openInTab

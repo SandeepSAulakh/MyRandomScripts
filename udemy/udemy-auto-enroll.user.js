@@ -3,6 +3,11 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.5
 // @description  Auto closes Udemy course tab if not 100% off or already enrolled, auto enrolls if free. Handles rate limiting.
+// @author       SandeepSAulakh
+// @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
+// @supportURL   https://github.com/SandeepSAulakh/MyRandomScripts/issues
+// @updateURL    https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/udemy/udemy-auto-enroll.user.js
+// @downloadURL  https://raw.githubusercontent.com/SandeepSAulakh/MyRandomScripts/main/udemy/udemy-auto-enroll.user.js
 // @match        https://www.udemy.com/course/*
 // @match        https://www.udemy.com/payment/checkout/*
 // @match        https://www.udemy.com/cart/success/*
