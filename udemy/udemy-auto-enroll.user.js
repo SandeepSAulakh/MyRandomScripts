@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Udemy Auto Close Non-Free / Auto Enroll Free
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  Auto closes Udemy course tab if not 100% off or already enrolled, auto enrolls if free. Handles rate limiting.
 // @match        https://www.udemy.com/course/*
 // @match        https://www.udemy.com/payment/checkout/*
@@ -26,13 +26,13 @@
         MAX_CLOSE_DELAY: 2000,
 
         // Rate limit handling
-        FORBIDDEN_WAIT_MIN: 30000,
-        FORBIDDEN_WAIT_MAX: 60000,
-        FORBIDDEN_MAX_RETRIES: 5,
+        FORBIDDEN_WAIT_MIN: 45000,   // 45 seconds min wait
+        FORBIDDEN_WAIT_MAX: 90000,   // 90 seconds max wait
+        FORBIDDEN_MAX_RETRIES: 3,    // Fewer retries, longer waits
 
         // Global throttle
         GLOBAL_LOCK_KEY: 'udemy_global_lock',
-        LOCK_TIMEOUT: 15000,
+        LOCK_TIMEOUT: 20000,         // Longer lock timeout
         LOCK_WAIT_INTERVAL: 2000,
         LOCK_MAX_WAIT: 120000,
     };
@@ -40,7 +40,7 @@
     const RETRY_KEY = 'udemy_retry_' + window.location.pathname;
     const FORBIDDEN_KEY = 'udemy_forbidden_' + window.location.pathname;
 
-    console.log('Udemy auto-enroll script v2.4 loaded!');
+    console.log('Udemy auto-enroll script v2.5 loaded!');
 
     // ==================== FORBIDDEN PAGE DETECTION ====================
 

@@ -34,20 +34,42 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         `;
         
-        btn.onclick = function() {
+        btn.onclick = async function() {
             const links = document.querySelectorAll('a');
-            let count = 0;
-            
+            const redeemLinks = [];
+
             for (const link of links) {
                 if (link.textContent.trim() === 'REDEEM OFFER') {
-                    const url = link.href;
-                    GM_openInTab(url, { active: false, insert: true });
-                    count++;
+                    redeemLinks.push(link.href);
                 }
             }
-            
-            console.log(`Opened ${count} REDEEM OFFER links!`);
-            alert(`Opened ${count} REDEEM OFFER links in background!`);
+
+            if (redeemLinks.length === 0) {
+                alert('No REDEEM OFFER links found!');
+                return;
+            }
+
+            btn.textContent = `🎓 Opening 0/${redeemLinks.length}...`;
+            btn.disabled = true;
+
+            // Open tabs with delay to avoid rate limiting
+            const DELAY_BETWEEN_TABS = 8000; // 8 seconds between each tab
+
+            for (let i = 0; i < redeemLinks.length; i++) {
+                GM_openInTab(redeemLinks[i], { active: false, insert: true });
+                btn.textContent = `🎓 Opening ${i + 1}/${redeemLinks.length}...`;
+                console.log(`Opened ${i + 1}/${redeemLinks.length}: ${redeemLinks[i]}`);
+
+                // Wait before opening next tab (except for last one)
+                if (i < redeemLinks.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_TABS));
+                }
+            }
+
+            btn.textContent = '🎓 Open All REDEEM OFFER';
+            btn.disabled = false;
+            console.log(`Opened ${redeemLinks.length} REDEEM OFFER links!`);
+            alert(`Opened ${redeemLinks.length} REDEEM OFFER links!`);
         };
         
         document.body.appendChild(btn);
