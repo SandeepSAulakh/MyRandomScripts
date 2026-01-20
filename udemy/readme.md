@@ -41,6 +41,27 @@ const CONFIG = {
 
 Adds a floating button to Gmail that opens all "REDEEM OFFER" links in background tabs with batch processing.
 
+**Works on:** Gmail
+
+---
+
+### 3. `reddit-open-udemy-links.user.js` (v1.0)
+
+Adds a floating button on Reddit to open all "REDEEM OFFER" links from idownloadcoupon.com.
+
+**Works on:** Reddit (www, old, new)
+
+**Features:**
+- Button only appears when REDEEM OFFER links are found
+- Only targets links from idownloadcoupon.com
+- **Batch processing** - opens 5 tabs at a time
+- **Random delays** between tabs (2-4s) and batches (10-15s)
+- **Stop button** - cancel anytime during processing
+- Tabs open in background
+- Auto-detects new links as you scroll (Reddit SPA)
+
+**Works on:** Gmail
+
 **Features:**
 - Floating blue button in Gmail
 - **Batch processing** - opens 5 tabs at a time
@@ -136,3 +157,6 @@ Next batch...
 - **v1.2** - Added batch processing with random delays
 - **v1.1** - Opens tabs in background (stays on Gmail)
 - **v1.0** - Initial version
+
+### reddit-open-udemy-links.user.js
+- **v1.0** - Initial version with batch processing, stop button, idownloadcoupon.com filter
