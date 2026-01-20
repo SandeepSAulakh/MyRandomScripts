@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  Adds a button to open all idownloadcoupon.com REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -110,6 +110,8 @@
             cursor: pointer;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             display: none;
+            white-space: nowrap;
+            min-width: 200px;
         `;
 
         // Stop button (hidden by default)
@@ -225,7 +227,7 @@
     }
 
     // Initialize
-    console.log('Reddit REDEEM OFFER script v1.0.2 loaded!');
+    console.log('Reddit REDEEM OFFER script v1.0.3 loaded!');
 
     // Wait for page to load then add buttons
     setTimeout(addButtons, 2000);
