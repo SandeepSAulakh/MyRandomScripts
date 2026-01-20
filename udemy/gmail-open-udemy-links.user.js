@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gmail Open All Udemy REDEEM OFFER Links
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.2.1
 // @description  Adds a button to open all REDEEM OFFER links in new tabs with batch processing
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -56,10 +56,13 @@
 
             // Configuration
             const CONFIG = {
-                BATCH_SIZE: 5,              // Tabs per batch
-                MIN_DELAY_IN_BATCH: 3000,   // 3-6 sec between tabs in same batch
+                // Tabs per batch
+                BATCH_SIZE: 5,
+                // 3-6 sec between tabs in same batch
+                MIN_DELAY_IN_BATCH: 3000,
                 MAX_DELAY_IN_BATCH: 6000,
-                MIN_BATCH_PAUSE: 30000,     // 30-45 sec pause between batches
+                // 30-45 sec pause between batches
+                MIN_BATCH_PAUSE: 30000,
                 MAX_BATCH_PAUSE: 45000
             };
 
@@ -68,7 +71,8 @@
 
             btn.textContent = `🎓 Opening 0/${redeemLinks.length}...`;
             btn.disabled = true;
-            btn.style.background = '#ff9800'; // Orange while processing
+            // Orange while processing
+            btn.style.background = '#ff9800';
 
             let opened = 0;
             const totalBatches = Math.ceil(redeemLinks.length / CONFIG.BATCH_SIZE);
@@ -100,14 +104,17 @@
                     const batchPause = randomDelay(CONFIG.MIN_BATCH_PAUSE, CONFIG.MAX_BATCH_PAUSE);
                     console.log(`Batch ${batchNum} complete. Pausing ${(batchPause/1000).toFixed(0)}s before next batch...`);
                     btn.textContent = `⏸️ Pausing ${Math.round(batchPause/1000)}s... (${opened}/${redeemLinks.length})`;
-                    btn.style.background = '#9c27b0'; // Purple during pause
+                    // Purple during pause
+                    btn.style.background = '#9c27b0';
                     await sleep(batchPause);
-                    btn.style.background = '#ff9800'; // Back to orange
+                    // Back to orange
+                    btn.style.background = '#ff9800';
                 }
             }
 
             btn.textContent = '🎓 Open All REDEEM OFFER';
-            btn.style.background = '#1a73e8'; // Back to blue
+            // Back to blue
+            btn.style.background = '#1a73e8';
             btn.disabled = false;
             console.log(`✅ Done! Opened ${redeemLinks.length} REDEEM OFFER links in ${totalBatches} batches.`);
             alert(`Done! Opened ${redeemLinks.length} links in ${totalBatches} batches.`);

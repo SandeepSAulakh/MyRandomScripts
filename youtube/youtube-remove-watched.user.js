@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Auto Remove Watched Videos
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5.1
 // @description  Auto removes watched videos from Watch Later playlist
 // @author       SandeepSAulakh
 // @homepageURL  https://github.com/SandeepSAulakh/MyRandomScripts
@@ -17,7 +17,7 @@
 (function() {
     'use strict';
     
-    console.log('YouTube Auto Remove Watched script v1.5 loaded!');
+    console.log('YouTube Auto Remove Watched script v1.5.1 loaded!');
     
     // Helper: Wait for element to appear
     function waitForElement(selectors, timeout = 5000) {
